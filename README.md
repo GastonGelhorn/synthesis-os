@@ -16,6 +16,9 @@ SynthesisOS is not another chat UI with plugins. It is an **operating-system lay
 - **No artificial limits, but safe by design:** If a tool exists for the task, the agent uses it. Destructive syscalls (delete files, send emails, write to disk) require explicit user confirmation via a Human-in-the-loop gate before execution — hardcoded for Alpha, not a user-configurable setting.
 
 ---
+![Screenshot 2026-03-03 at 22 32 56](https://github.com/user-attachments/assets/eab34274-8801-4efe-9366-d6a3948ceb8f)
+![Screenshot 2026-03-03 at 22 38 13](https://github.com/user-attachments/assets/b68d87b6-197c-4a30-89c6-5456ca711016)
+
 
 ## Key capabilities
 
@@ -42,6 +45,7 @@ SynthesisOS is not another chat UI with plugins. It is an **operating-system lay
 | **A2UI protocol (v0.9)**            | Agents return structured UI, not text — [A2UI open standard](https://a2ui.org), 30+ native block components (tables, galleries, media players, interactive inputs, maps…)             |
 | **Multiple LLM providers**          | OpenAI, Anthropic, Groq, Gemini, Ollama — switchable in settings                                                                                                                      |
 
+![Screenshot 2026-03-03 at 22 41 05](https://github.com/user-attachments/assets/610574df-46ea-4f15-a58d-7c859353ba33)
 
 ---
 
