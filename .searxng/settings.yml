@@ -1,0 +1,31 @@
+use_default_settings: true
+
+search:
+  formats:
+    - html
+    - json
+  default_lang: "es"
+  autocomplete: "google"
+
+server:
+  secret_key: "synthesisos-searxng-secret-key-2024"
+  limiter: false
+  image_proxy: true
+
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+    disabled: false
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    disabled: false
+  - name: bing
+    engine: bing
+    shortcut: b
+    disabled: false
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: w
+    disabled: false
