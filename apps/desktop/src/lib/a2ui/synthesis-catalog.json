@@ -1,0 +1,153 @@
+{
+  "catalogId": "https://synthesisos.dev/a2ui/synthesis-catalog/v1",
+  "description": "A2UI v0.9 compatible. Text/Image/Divider=standard; TextBlock/HeroImage/Separator=aliases",
+  "components": {
+    "Text": {
+      "type": "object",
+      "description": "A2UI standard. text + variant (h1,h2,h3,h4,h5,caption,body)",
+      "properties": {
+        "text": { "type": "object", "description": "DynamicString" },
+        "variant": { "type": "string", "enum": ["h1", "h2", "h3", "h4", "h5", "caption", "body"] }
+      }
+    },
+    "Image": {
+      "type": "object",
+      "description": "A2UI standard. Single image",
+      "properties": {
+        "url": { "type": "object" },
+        "caption": { "type": "object" }
+      }
+    },
+    "Divider": {
+      "type": "object",
+      "description": "A2UI standard. axis: horizontal|vertical",
+      "properties": {
+        "axis": { "type": "string", "enum": ["horizontal", "vertical"] },
+        "label": { "type": "object" }
+      }
+    },
+    "TextBlock": {
+      "type": "object",
+      "description": "Alias for Text. content + style",
+      "properties": {
+        "content": { "type": "object", "description": "BoundValue: literalString or path" },
+        "style": { "type": "string", "enum": ["h1", "h2", "body", "caption", "quote", "none"] }
+      }
+    },
+    "DataGrid": {
+      "type": "object",
+      "description": "Key-value data grid",
+      "properties": {
+        "items": { "type": "array", "items": { "type": "object", "properties": { "label": { "type": "string" }, "value": { "type": "string" }, "icon": { "type": "string" } } } }
+      }
+    },
+    "ActionRow": {
+      "type": "object",
+      "description": "Row of action buttons",
+      "properties": {
+        "actions": { "type": "array", "items": { "type": "object", "properties": { "label": { "type": "string" }, "intent": { "type": "string" }, "primary": { "type": "boolean" } } } }
+      }
+    },
+    "HeroImage": {
+      "type": "object",
+      "description": "Hero/feature image",
+      "properties": {
+        "url": { "type": "object", "description": "BoundValue for URL" },
+        "caption": { "type": "object", "description": "BoundValue for caption" }
+      }
+    },
+    "ImageGallery": {
+      "type": "object",
+      "description": "Gallery of images",
+      "properties": {
+        "images": { "type": "array", "items": { "type": "object", "properties": { "url": { "type": "string" }, "caption": { "type": "string" } } } }
+      }
+    },
+    "ListBlock": {
+      "type": "object",
+      "description": "List of items",
+      "properties": {
+        "items": { "type": "array", "items": { "type": "object", "properties": { "text": { "type": "string" }, "icon": { "type": "string" } } } },
+        "ordered": { "type": "boolean" }
+      }
+    },
+    "CodeBlock": {
+      "type": "object",
+      "description": "Code snippet",
+      "properties": {
+        "code": { "type": "object", "description": "BoundValue" },
+        "language": { "type": "string" }
+      }
+    },
+    "ProgressBar": {
+      "type": "object",
+      "description": "Progress indicators",
+      "properties": {
+        "items": { "type": "array", "items": { "type": "object", "properties": { "label": { "type": "string" }, "value": { "type": "number" }, "color": { "type": "string" } } } }
+      }
+    },
+    "StatsRow": {
+      "type": "object",
+      "description": "Statistics row",
+      "properties": {
+        "stats": { "type": "array", "items": { "type": "object", "properties": { "label": { "type": "string" }, "value": { "type": "string" }, "trend": { "type": "string", "enum": ["up", "down", "neutral"] } } } }
+      }
+    },
+    "LinkPreview": {
+      "type": "object",
+      "description": "Link preview card",
+      "properties": {
+        "url": { "type": "object" },
+        "title": { "type": "object" },
+        "description": { "type": "object" }
+      }
+    },
+    "Separator": {
+      "type": "object",
+      "description": "Visual separator",
+      "properties": {
+        "label": { "type": "object" }
+      }
+    },
+    "Callout": {
+      "type": "object",
+      "description": "Callout/alert block",
+      "properties": {
+        "content": { "type": "object" },
+        "variant": { "type": "string", "enum": ["info", "warning", "success", "error"] },
+        "title": { "type": "object" }
+      }
+    },
+    "TableBlock": {
+      "type": "object",
+      "description": "Table",
+      "properties": {
+        "headers": { "type": "array", "items": { "type": "string" } },
+        "rows": { "type": "array", "items": { "type": "array", "items": { "type": "string" } } }
+      }
+    },
+    "CanvasBlock": {
+      "type": "object",
+      "description": "Chart/canvas visualization",
+      "properties": {
+        "title": { "type": "object" },
+        "canvas_type": { "type": "string", "enum": ["bar", "line"] },
+        "items": { "type": "array", "items": { "type": "object", "properties": { "label": { "type": "string" }, "value": { "type": "number" }, "color": { "type": "string" } } } }
+      }
+    },
+    "Column": {
+      "type": "object",
+      "description": "Vertical layout container",
+      "properties": {
+        "children": {
+          "type": "object",
+          "description": "explicitList or template",
+          "properties": {
+            "explicitList": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    }
+  },
+  "styles": {}
+}

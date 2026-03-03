@@ -1,0 +1,45 @@
+[package]
+name = "kernel"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77.2"
+description = "SynthesisOS kernel — agent runtime, scheduler, memory, tools"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
+tokio = { version = "1", features = ["full", "process", "rt"] }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
+tauri-plugin-store = "2"
+uuid = { version = "1.20.0", features = ["v4"] }
+reqwest = { version = "0.13.2", features = ["rustls", "json", "blocking", "stream"] }
+dotenvy = "0.15.7"
+rusqlite = { version = "0.38.0", features = ["bundled"] }
+lancedb = "0.10.0"
+arrow = "52.2.0"
+futures-util = "0.3.32"
+async-openai = { version = "0.33.0", features = ["full"] }
+urlencoding = "2.1"
+chrono = "0.4"
+fasteval = "0.2"
+regex = "1.10"
+url = "2.5"
+once_cell = "1.20"
+ort = { version = "2.0.0-rc.11", features = ["ndarray"] }
+tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
+ndarray = "0.16"
+axum = { version = "0.7", features = ["json", "macros", "ws", "tower-log"] }
+axum-server = { version = "0.8", features = ["tls-rustls"] }
+rustls = { version = "0.23", features = ["ring"] }
+tower = "0.5"
+tower-http = { version = "0.5", features = ["cors", "fs"] }
+jsonwebtoken = "9"
+argon2 = "0.5"
+tokio-stream = "0.1"
+time = "0.3.41"
+rcgen = { version = "0.14.7", features = ["pem"] }
+get_if_addrs = "0.5.3"
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Allow sending Apple Events to other apps (Mail, Calendar, Notes, etc.) -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+    <!-- Allow child process execution (osascript) -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <!-- Allow outgoing network connections (AI API calls, web search, scraping) -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <!-- Disable app sandbox — required for osascript, shell access, and full system integration -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+    <!-- Hardened runtime: allow JIT (needed by WebView/V8) -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <!-- Allow Calendar Access for EventKit -->
+    <key>com.apple.security.personal-information.calendars</key>
+    <true/>
+</dict>
+</plist>
