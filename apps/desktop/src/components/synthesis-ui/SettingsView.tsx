@@ -2028,7 +2028,7 @@ function SectionContent({ sectionId, nodes, onCloseNode, onActivateNode, onClean
         case "synthesis":
             return (
                 <div>
-                    <SettingRow label="Auto-Refine" description="Automatically refine results for better quality">
+                    <SettingRow label="Auto-Refine" description="Automatically refine results for better quality. This triggers an extra LLM call using max tokens.">
                         <Toggle enabled={settings.autoRefine} onChange={(v) => updateSetting("autoRefine", v)} />
                     </SettingRow>
                     <SettingRow label="Show Source Links" description="Display source attribution on synthesis cards">

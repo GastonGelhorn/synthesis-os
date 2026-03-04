@@ -354,6 +354,8 @@ export function NodeCard({
                                                 onAnswer={onAnswerStep}
                                                 onContinueConversation={onContinueFromCard ? (msg) => onContinueFromCard(node.id, msg) : undefined}
                                                 isActive={isActive}
+                                                sources={node.content.sources || undefined}
+                                                showSourceLinks={settings.sourceLinks}
                                             />
                                         </Suspense>
                                     )}

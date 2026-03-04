@@ -1211,6 +1211,73 @@ export function useSynthesis(nodeStore: SynthesisNodeStore, settings: SynthesisS
                     if (settings.synthComplete && settings.notifs) {
                         sendBrowserNotification("Agent Task Complete", card.title || query);
                     }
+
+                    if (settings.autoRefine && card) {
+                        setTimeout(async () => {
+                            setNodes((prev) =>
+                                prev.map((n) =>
+                                    n.id === nodeId
+                                        ? {
+                                            ...n,
+                                            status: "synthesizing",
+                                            content: {
+                                                ...n.content,
+                                                logs: [...(n.content.logs || []), "Auto-refining output (max tokens)..."],
+                                            },
+                                        }
+                                        : n
+                                )
+                            );
+
+                            const textToRefine = card.blocks
+                                ? JSON.stringify(card.blocks)
+                                : card.summary || card.title || query;
+
+                            try {
+                                const refineResult = await synthesizeClient(
+                                    `Refine, polish, and deeply improve the quality of this response. Fix formatting, structure, and tone. Do not invent new facts. Respond with a highly professional structure:\n\n${textToRefine}`,
+                                    {
+                                        aiProvider: settings.aiProvider,
+                                        aiModel: settings.aiModel,
+                                        ollamaEndpoint: settings.ollamaEndpoint,
+                                        temperature: Math.max(0, settings.temperature - 10),
+                                        maxTokens: settings.maxTokens,
+                                        scrapeEnabled: false,
+                                        openaiApiKey: settings.openaiApiKey,
+                                        anthropicApiKey: settings.anthropicApiKey,
+                                        groqApiKey: settings.groqApiKey,
+                                        geminiApiKey: settings.geminiApiKey,
+                                    }
+                                );
+
+                                if (refineResult.success && refineResult.data) {
+                                    const rfData = refineResult.data as Record<string, unknown>;
+                                    setNodes((prev) =>
+                                        prev.map((n) =>
+                                            n.id === nodeId
+                                                ? {
+                                                    ...n,
+                                                    status: "active",
+                                                    content: {
+                                                        ...n.content,
+                                                        title: String(rfData?.title ?? n.content.title),
+                                                        summary: String(rfData?.summary ?? n.content.summary),
+                                                        blocks: (rfData?.blocks ?? n.content.blocks) as typeof n.content.blocks,
+                                                        logs: [...(n.content.logs || []), "Auto-refined successfully"],
+                                                    },
+                                                    updatedAt: Date.now(),
+                                                }
+                                                : n
+                                        )
+                                    );
+                                } else {
+                                    setNodes((prev) => prev.map((n) => n.id === nodeId ? { ...n, status: "active" } : n));
+                                }
+                            } catch (e) {
+                                setNodes((prev) => prev.map((n) => n.id === nodeId ? { ...n, status: "active" } : n));
+                            }
+                        }, 2000);
+                    }
                     break;
                 }
 
@@ -1547,7 +1614,7 @@ export function useSynthesis(nodeStore: SynthesisNodeStore, settings: SynthesisS
                     title: value,
                     spaceId: activeSpaceId,
                     position: { x: spawnPos.x, y: spawnPos.y, z: 0 },
-                    dimension: { w: size.w, h: Math.min(size.h, 360) },
+                    dimension: { w: Math.floor(size.w * 1.4), h: Math.max(size.h, 460) },
                     status: "synthesizing",
                     zIndex: Math.max(0, ...nodes.map((n) => n.zIndex)) + 1,
                     createdAt: Date.now(),
