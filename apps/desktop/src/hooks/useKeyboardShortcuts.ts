@@ -17,6 +17,7 @@ interface ShortcutHandlers {
     onExitFocusMode?: () => void;
     isFocusMode?: boolean;
     isSettingsOpen: boolean;
+    settings?: import("@/types/settings").SynthesisSettings;
 }
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
@@ -78,18 +79,19 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
                     break;
 
                 case "1":
-                    e.preventDefault();
-                    handlers.onSwitchSpace(SPACES[0]);
-                    break;
-
                 case "2":
-                    e.preventDefault();
-                    handlers.onSwitchSpace(SPACES[1]);
-                    break;
-
                 case "3":
-                    e.preventDefault();
-                    handlers.onSwitchSpace(SPACES[2]);
+                case "4":
+                case "5":
+                case "6":
+                case "7":
+                case "8":
+                case "9":
+                    const index = parseInt(e.key) - 1;
+                    if (handlers.settings?.spaces && handlers.settings.spaces[index]) {
+                        e.preventDefault();
+                        handlers.onSwitchSpace(handlers.settings.spaces[index].id);
+                    }
                     break;
             }
         };

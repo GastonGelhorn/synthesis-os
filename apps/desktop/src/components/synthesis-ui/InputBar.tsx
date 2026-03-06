@@ -139,10 +139,21 @@ export const InputBar = forwardRef<InputBarHandle, InputBarProps>(function Input
     streamingReasoning,
     streamingContent,
 }, ref) {
+    const { settings } = useSettings();
     const [value, setValue] = useState("");
     const inputRef = useRef<HTMLInputElement>(null);
-    const glow = SPACE_GLOW[spaceId];
-    const { settings } = useSettings();
+    const glow = useMemo(() => {
+        const space = settings.spaces.find(s => s.id === spaceId);
+        if (space) {
+            return {
+                from: `${space.color}2e`,
+                via: `${space.color}24`,
+                to: `${space.color}1a`,
+                accent: space.color
+            };
+        }
+        return SPACE_GLOW["work"] || { from: "rgba(96, 165, 250, 0.18)", via: "rgba(129, 140, 248, 0.14)", to: "rgba(96, 165, 250, 0.10)", accent: "#60a5fa" };
+    }, [settings.spaces, spaceId]);
     const thinkingHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const prewarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [expanded, setExpanded] = useState(false);
@@ -190,7 +201,7 @@ export const InputBar = forwardRef<InputBarHandle, InputBarProps>(function Input
         prewarmTimerRef.current = setTimeout(() => {
             prewarmTimerRef.current = null;
             import("@tauri-apps/api/core").then(({ invoke }) => {
-                invoke("kernel_ping").catch(() => {});
+                invoke("kernel_ping").catch(() => { });
             });
         }, 300);
     }, []);
@@ -270,10 +281,10 @@ export const InputBar = forwardRef<InputBarHandle, InputBarProps>(function Input
     const computedPlaceholder = showQuestionBanner
         ? "Your answer..."
         : placeholder ?? (mode === "os"
-            ? "Hablar con el OS..."
+            ? "Talk to OS..."
             : activeNodeTitle
-                ? `Continuar con "${activeNodeTitle}"...`
-                : "Nueva tarea...");
+                ? `Continue with "${activeNodeTitle}"...`
+                : "New task...");
 
     return (
         <div className={cn("w-full relative z-50 mx-auto", compact ? "max-w-xl" : "max-w-2xl")}>

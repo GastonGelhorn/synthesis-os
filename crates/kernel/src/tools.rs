@@ -1199,6 +1199,30 @@ impl Tool for EmailList {
     }
 }
 
+/// Email read
+pub struct EmailRead;
+impl Tool for EmailRead {
+    fn name(&self) -> &'static str {
+        "email_read"
+    }
+    fn description(&self) -> &'static str {
+        "Read the full body content of a specific email by its message ID. Use when the user wants to read a particular email found in a previous list."
+    }
+    fn execute(&self, args: &str) -> Result<String, String> {
+        let payload: Value =
+            serde_json::from_str(args).map_err(|e| format!("Invalid JSON: {}", e))?;
+        let id = payload
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or("Missing 'id'")?;
+        let apps = MacOSApps;
+        run_macos_async(apps.email_read(id)).map_err(|e| e.to_string())
+    }
+    fn definition(&self) -> Value {
+        serde_json::json!({"type":"function","function":{"name":self.name(),"description":self.description(),"parameters":{"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}}})
+    }
+}
+
 /// Calendar today
 pub struct CalendarToday;
 impl Tool for CalendarToday {
@@ -2517,58 +2541,89 @@ impl Tool for Weather {
             .and_then(Value::as_str)
             .ok_or_else(|| "Missing required argument: 'city'".to_string())?;
 
-        let url = format!("https://wttr.in/{}?format=j1", urlencoding::encode(city));
-
         let client = reqwest::blocking::Client::builder()
-            .user_agent("curl/7.64.1")
-            // Avoid hanging the entire agent if wttr.in is slow or unreachable
+            .user_agent("SynthesisOS-Agent/1.0")
             .timeout(std::time::Duration::from_secs(10))
             .build()
             .map_err(|e| e.to_string())?;
 
-        let response = client
-            .get(&url)
+        // Step 1: Geocoding
+        let geo_url = format!(
+            "https://geocoding-api.open-meteo.com/v1/search?name={}&count=1&language=en&format=json",
+            urlencoding::encode(city)
+        );
+
+        let geo_res = client
+            .get(&geo_url)
+            .send()
+            .map_err(|e| format!("Geocoding request failed: {}", e))?;
+
+        let geo_text = geo_res
+            .text()
+            .map_err(|e| format!("Failed to read geocoding response: {}", e))?;
+
+        let geo_json: Value =
+            serde_json::from_str(&geo_text).map_err(|e| format!("Invalid geocoding JSON: {}", e))?;
+
+        let first_result = geo_json
+            .get("results")
+            .and_then(|r| r.as_array())
+            .and_then(|a| a.first())
+            .ok_or_else(|| format!("Could not find coordinates for city: {}", city))?;
+
+        let lat = first_result.get("latitude").and_then(Value::as_f64).unwrap_or(0.0);
+        let lon = first_result.get("longitude").and_then(Value::as_f64).unwrap_or(0.0);
+        let resolved_city = first_result.get("name").and_then(Value::as_str).unwrap_or(city);
+
+        // Step 2: Weather Forecast
+        let weather_url = format!(
+            "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m",
+            lat, lon
+        );
+
+        let weather_res = client
+            .get(&weather_url)
             .send()
             .map_err(|e| format!("Weather request failed: {}", e))?;
 
-        let text = response
+        let weather_text = weather_res
             .text()
             .map_err(|e| format!("Failed to read weather response: {}", e))?;
 
-        // Parse wttr.in j1 format: extract current_condition from JSON
-        let json: Value =
-            serde_json::from_str(&text).map_err(|e| format!("Invalid weather JSON: {}", e))?;
+        let weather_json: Value =
+            serde_json::from_str(&weather_text).map_err(|e| format!("Invalid weather JSON: {}", e))?;
 
-        let current = json
-            .get("current_condition")
-            .and_then(|arr| arr.as_array())
-            .and_then(|a| a.first())
+        let current = weather_json
+            .get("current")
             .ok_or_else(|| "No current condition in response".to_string())?;
 
-        let temp = current.get("temp_C").and_then(Value::as_str).unwrap_or("?");
-        let feels = current
-            .get("FeelsLikeC")
-            .and_then(Value::as_str)
-            .unwrap_or("?");
-        let desc = current
-            .get("weatherDesc")
-            .and_then(|a| a.as_array())
-            .and_then(|a| a.first())
-            .and_then(|o| o.get("value"))
-            .and_then(Value::as_str)
-            .unwrap_or("Unknown");
-        let humidity = current
-            .get("humidity")
-            .and_then(Value::as_str)
-            .unwrap_or("?");
-        let wind = current
-            .get("windspeedKmph")
-            .and_then(Value::as_str)
-            .unwrap_or("?");
+        let temp = current.get("temperature_2m").and_then(Value::as_f64).unwrap_or(0.0);
+        let feels = current.get("apparent_temperature").and_then(Value::as_f64).unwrap_or(0.0);
+        let humidity = current.get("relative_humidity_2m").and_then(Value::as_f64).unwrap_or(0.0);
+        let wind = current.get("wind_speed_10m").and_then(Value::as_f64).unwrap_or(0.0);
+        
+        // Map WMO weather code to standard text description (basic mapping)
+        let wmo_code = current.get("weather_code").and_then(Value::as_u64).unwrap_or(0);
+        let desc = match wmo_code {
+            0 => "Clear sky",
+            1 | 2 | 3 => "Mainly clear, partly cloudy, and overcast",
+            45 | 48 => "Fog and depositing rime fog",
+            51 | 53 | 55 => "Drizzle: Light, moderate, and dense intensity",
+            56 | 57 => "Freezing Drizzle: Light and dense intensity",
+            61 | 63 | 65 => "Rain: Slight, moderate and heavy intensity",
+            66 | 67 => "Freezing Rain: Light and heavy intensity",
+            71 | 73 | 75 => "Snow fall: Slight, moderate, and heavy intensity",
+            77 => "Snow grains",
+            80 | 81 | 82 => "Rain showers: Slight, moderate, and violent",
+            85 | 86 => "Snow showers slight and heavy",
+            95 => "Thunderstorm: Slight or moderate",
+            96 | 99 => "Thunderstorm with slight and heavy hail",
+            _ => "Unknown conditions",
+        };
 
         Ok(format!(
             "Weather in {}: {}°C (feels like {}°C). {}. Humidity: {}%. Wind: {} km/h.",
-            city, temp, feels, desc, humidity, wind
+            resolved_city, temp, feels, desc, humidity, wind
         ))
     }
 
@@ -2820,11 +2875,7 @@ impl Tool for StorageReadTool {
     }
     fn execute(&self, args: &str) -> Result<String, String> {
         let p: Value = serde_json::from_str(args).map_err(|e| format!("Invalid JSON: {}", e))?;
-        let agent_id = p
-            .get("agent_id")
-            .and_then(Value::as_str)
-            .ok_or("Missing 'agent_id'")?
-            .to_string();
+        let agent_id = "user".to_string();
         let path = p
             .get("path")
             .and_then(Value::as_str)
@@ -2837,7 +2888,7 @@ impl Tool for StorageReadTool {
         })
     }
     fn definition(&self) -> Value {
-        serde_json::json!({"type":"function","function":{"name":self.name(),"description":self.description(),"parameters":{"type":"object","properties":{"agent_id":{"type":"string","description":"The agent's unique ID"},"path":{"type":"string","description":"File path in LSFS (e.g. /docs/notes.txt)"}},"required":["agent_id","path"]}}})
+        serde_json::json!({"type":"function","function":{"name":self.name(),"description":self.description(),"parameters":{"type":"object","properties":{"path":{"type":"string","description":"File path in LSFS (e.g. /docs/notes.txt)"}},"required":["path"]}}})
     }
 }
 
@@ -2859,11 +2910,7 @@ impl Tool for StorageWriteTool {
     }
     fn execute(&self, args: &str) -> Result<String, String> {
         let p: Value = serde_json::from_str(args).map_err(|e| format!("Invalid JSON: {}", e))?;
-        let agent_id = p
-            .get("agent_id")
-            .and_then(Value::as_str)
-            .ok_or("Missing 'agent_id'")?
-            .to_string();
+        let agent_id = "user".to_string();
         let path = p
             .get("path")
             .and_then(Value::as_str)
@@ -2882,7 +2929,7 @@ impl Tool for StorageWriteTool {
         })
     }
     fn definition(&self) -> Value {
-        serde_json::json!({"type":"function","function":{"name":self.name(),"description":self.description(),"parameters":{"type":"object","properties":{"agent_id":{"type":"string","description":"The agent's unique ID"},"path":{"type":"string","description":"File path in LSFS"},"data":{"type":"string","description":"Content to write"}},"required":["agent_id","path","data"]}}})
+        serde_json::json!({"type":"function","function":{"name":self.name(),"description":self.description(),"parameters":{"type":"object","properties":{"path":{"type":"string","description":"File path in LSFS"},"data":{"type":"string","description":"Content to write"}},"required":["path","data"]}}})
     }
 }
 
@@ -2904,11 +2951,7 @@ impl Tool for StorageCreateTool {
     }
     fn execute(&self, args: &str) -> Result<String, String> {
         let p: Value = serde_json::from_str(args).map_err(|e| format!("Invalid JSON: {}", e))?;
-        let agent_id = p
-            .get("agent_id")
-            .and_then(Value::as_str)
-            .ok_or("Missing 'agent_id'")?
-            .to_string();
+        let agent_id = "user".to_string();
         let path = p
             .get("path")
             .and_then(Value::as_str)
@@ -2923,7 +2966,7 @@ impl Tool for StorageCreateTool {
         })
     }
     fn definition(&self) -> Value {
-        serde_json::json!({"type":"function","function":{"name":self.name(),"description":self.description(),"parameters":{"type":"object","properties":{"agent_id":{"type":"string","description":"The agent's unique ID"},"path":{"type":"string","description":"Path to create"},"content":{"type":"string","description":"File content (omit for directory)"}},"required":["agent_id","path"]}}})
+        serde_json::json!({"type":"function","function":{"name":self.name(),"description":self.description(),"parameters":{"type":"object","properties":{"path":{"type":"string","description":"Path to create"},"content":{"type":"string","description":"File content (omit for directory)"}},"required":["path"]}}})
     }
 }
 
@@ -2945,11 +2988,7 @@ impl Tool for StorageListTool {
     }
     fn execute(&self, args: &str) -> Result<String, String> {
         let p: Value = serde_json::from_str(args).map_err(|e| format!("Invalid JSON: {}", e))?;
-        let agent_id = p
-            .get("agent_id")
-            .and_then(Value::as_str)
-            .ok_or("Missing 'agent_id'")?
-            .to_string();
+        let agent_id = "user".to_string();
         let path = p
             .get("path")
             .and_then(Value::as_str)
@@ -2962,7 +3001,7 @@ impl Tool for StorageListTool {
         })
     }
     fn definition(&self) -> Value {
-        serde_json::json!({"type":"function","function":{"name":self.name(),"description":self.description(),"parameters":{"type":"object","properties":{"agent_id":{"type":"string","description":"The agent's unique ID"},"path":{"type":"string","description":"Directory path to list"}},"required":["agent_id","path"]}}})
+        serde_json::json!({"type":"function","function":{"name":self.name(),"description":self.description(),"parameters":{"type":"object","properties":{"path":{"type":"string","description":"Directory path to list"}},"required":["path"]}}})
     }
 }
 
@@ -2984,11 +3023,7 @@ impl Tool for StorageDeleteTool {
     }
     fn execute(&self, args: &str) -> Result<String, String> {
         let p: Value = serde_json::from_str(args).map_err(|e| format!("Invalid JSON: {}", e))?;
-        let agent_id = p
-            .get("agent_id")
-            .and_then(Value::as_str)
-            .ok_or("Missing 'agent_id'")?
-            .to_string();
+        let agent_id = "user".to_string();
         let path = p
             .get("path")
             .and_then(Value::as_str)
@@ -3001,7 +3036,7 @@ impl Tool for StorageDeleteTool {
         })
     }
     fn definition(&self) -> Value {
-        serde_json::json!({"type":"function","function":{"name":self.name(),"description":self.description(),"parameters":{"type":"object","properties":{"agent_id":{"type":"string","description":"The agent's unique ID"},"path":{"type":"string","description":"Path to delete"}},"required":["agent_id","path"]}}})
+        serde_json::json!({"type":"function","function":{"name":self.name(),"description":self.description(),"parameters":{"type":"object","properties":{"path":{"type":"string","description":"Path to delete"}},"required":["path"]}}})
     }
 }
 
@@ -3023,11 +3058,7 @@ impl Tool for StorageRollbackTool {
     }
     fn execute(&self, args: &str) -> Result<String, String> {
         let p: Value = serde_json::from_str(args).map_err(|e| format!("Invalid JSON: {}", e))?;
-        let agent_id = p
-            .get("agent_id")
-            .and_then(Value::as_str)
-            .ok_or("Missing 'agent_id'")?
-            .to_string();
+        let agent_id = "user".to_string();
         let path = p
             .get("path")
             .and_then(Value::as_str)
@@ -3045,7 +3076,7 @@ impl Tool for StorageRollbackTool {
         })
     }
     fn definition(&self) -> Value {
-        serde_json::json!({"type":"function","function":{"name":self.name(),"description":self.description(),"parameters":{"type":"object","properties":{"agent_id":{"type":"string","description":"The agent's unique ID"},"path":{"type":"string","description":"File path to rollback"},"version":{"type":"integer","description":"Target version number"}},"required":["agent_id","path","version"]}}})
+        serde_json::json!({"type":"function","function":{"name":self.name(),"description":self.description(),"parameters":{"type":"object","properties":{"path":{"type":"string","description":"File path to rollback"},"version":{"type":"integer","description":"Target version number"}},"required":["path","version"]}}})
     }
 }
 
@@ -3067,11 +3098,7 @@ impl Tool for StorageVersionsTool {
     }
     fn execute(&self, args: &str) -> Result<String, String> {
         let p: Value = serde_json::from_str(args).map_err(|e| format!("Invalid JSON: {}", e))?;
-        let agent_id = p
-            .get("agent_id")
-            .and_then(Value::as_str)
-            .ok_or("Missing 'agent_id'")?
-            .to_string();
+        let agent_id = "user".to_string();
         let path = p
             .get("path")
             .and_then(Value::as_str)
@@ -3084,7 +3111,7 @@ impl Tool for StorageVersionsTool {
         })
     }
     fn definition(&self) -> Value {
-        serde_json::json!({"type":"function","function":{"name":self.name(),"description":self.description(),"parameters":{"type":"object","properties":{"agent_id":{"type":"string","description":"The agent's unique ID"},"path":{"type":"string","description":"File path to check versions"}},"required":["agent_id","path"]}}})
+        serde_json::json!({"type":"function","function":{"name":self.name(),"description":self.description(),"parameters":{"type":"object","properties":{"path":{"type":"string","description":"File path to check versions"}},"required":["path"]}}})
     }
 }
 

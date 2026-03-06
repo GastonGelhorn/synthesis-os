@@ -879,7 +879,7 @@ function MemorySection() {
         if (!(await confirmDialog("Clear ALL workspace data: cards, edges, conversation history (including OS chat), and tasks. Settings and LanceDB kernel memories will NOT be affected. Continue?"))) return;
         setNodes([]);
         setEdges([]);
-        setConversationHistory({ work: [], entertainment: [], research: [] });
+        setConversationHistory(Object.fromEntries(settings.spaces.map(s => [s.id, []])));
         setOsConversationHistory([]);
         setActiveNodeId(null);
         setTasks(new Map());
@@ -1081,11 +1081,7 @@ function MemorySection() {
                                         setChatSpaceFilter(v as SpaceId);
                                         setExpandedChatNodes(new Set());
                                     }}
-                                    options={[
-                                        { label: "Work", value: "work" },
-                                        { label: "Play", value: "entertainment" },
-                                        { label: "Research", value: "research" },
-                                    ]}
+                                    options={settings.spaces.map(s => ({ label: s.label, value: s.id }))}
                                 />
                             </div>
                             <div className="flex items-center gap-2">
@@ -1368,13 +1364,14 @@ function MemorySection() {
 }
 
 /* ─── Section Content ─── */
-function SectionContent({ sectionId, nodes, onCloseNode, onActivateNode, onCleanupStuckNodes, onCloseAllSpaceNodes }: {
+function SectionContent({ sectionId, nodes, onCloseNode, onActivateNode, onCleanupStuckNodes, onCloseAllSpaceNodes, setManageSpacesOpen }: {
     sectionId: string;
     nodes?: SynthesisNode[];
     onCloseNode?: (id: string) => void;
     onActivateNode?: (id: string) => void;
     onCleanupStuckNodes?: () => void;
     onCloseAllSpaceNodes?: (spaceId: SpaceId) => void;
+    setManageSpacesOpen: (open: boolean) => void;
 }) {
     const { settings, updateSetting, resetSettings, exportSettings, importSettings } = useSettings();
     const { activeProfileId } = useProfile();
@@ -1430,7 +1427,7 @@ function SectionContent({ sectionId, nodes, onCloseNode, onActivateNode, onClean
         if (!(await confirmDialog("Delete ALL stored data? This will remove workspace (cards, conversation, tasks), kernel memories (LanceDB), and local storage. Settings will NOT be affected. This cannot be undone."))) return;
         setNodes([]);
         setEdges([]);
-        setConversationHistory({ work: [], entertainment: [], research: [] });
+        setConversationHistory(Object.fromEntries(settings.spaces.map(s => [s.id, []])));
         setOsConversationHistory([]);
         setActiveNodeId(null);
         setTasks(new Map());
@@ -1870,14 +1867,13 @@ function SectionContent({ sectionId, nodes, onCloseNode, onActivateNode, onClean
                         <Toggle enabled={settings.widgetsEnabled} onChange={(v) => updateSetting("widgetsEnabled", v)} />
                     </SettingRow>
                     <SettingRow label="Default Space" description="Space to load on startup">
-                        <Select value={settings.defaultSpace} onChange={(v) => updateSetting("defaultSpace", v as SynthesisSettings["defaultSpace"])} options={[
-                            { label: "Work", value: "work" },
-                            { label: "Play", value: "entertainment" },
-                            { label: "Research", value: "research" },
-                        ]} />
+                        <Select value={settings.defaultSpace} onChange={(v) => updateSetting("defaultSpace", v as SpaceId)} options={settings.spaces.map(s => ({ label: s.label, value: s.id }))} />
                     </SettingRow>
                     <SettingRow label="Custom Spaces" description="Create and manage your own spaces">
-                        <button className="px-3 py-1.5 rounded-lg border border-theme text-[10px] text-theme-muted hover:text-theme-secondary transition-all">
+                        <button
+                            onClick={() => setManageSpacesOpen(true)}
+                            className="px-3 py-1.5 rounded-lg border border-theme text-[10px] text-theme-muted hover:text-theme-secondary transition-all"
+                        >
                             Manage →
                         </button>
                     </SettingRow>
@@ -1886,17 +1882,17 @@ function SectionContent({ sectionId, nodes, onCloseNode, onActivateNode, onClean
 
         case "nodes": {
             const allNodes = nodes || [];
-            const spaceNames: Record<SpaceId, string> = { work: "Work", entertainment: "Play", research: "Research" };
             const statusColors: Record<string, string> = {
                 active: "#34d399",
                 minimized: "#94a3b8",
-                synthesizing: "#fbbf24",
-                background: "#818cf8",
+                synthesizing: "#a78bfa",
+                error: "#f87171",
             };
-            const nodesBySpace = (["work", "entertainment", "research"] as SpaceId[]).map((sid) => ({
-                spaceId: sid,
-                label: spaceNames[sid],
-                nodes: allNodes.filter((n) => n.spaceId === sid),
+            const nodesBySpace = settings.spaces.map((s) => ({
+                spaceId: s.id,
+                label: s.label,
+                nodes: allNodes.filter((n) => n.spaceId === s.id),
+                color: s.color,
             }));
             const stuckCount = allNodes.filter(
                 (n) =>
@@ -1933,7 +1929,7 @@ function SectionContent({ sectionId, nodes, onCloseNode, onActivateNode, onClean
                         >
                             <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full" style={{ background: group.spaceId === "work" ? "#60a5fa" : group.spaceId === "entertainment" ? "#f472b6" : "#34d399" }} />
+                                    <div className="w-2 h-2 rounded-full" style={{ background: group.color }} />
                                     <p className="text-[10px] uppercase tracking-[0.18em] font-semibold text-theme-muted">
                                         {group.label}
                                     </p>
@@ -2032,7 +2028,7 @@ function SectionContent({ sectionId, nodes, onCloseNode, onActivateNode, onClean
         case "synthesis":
             return (
                 <div>
-                    <SettingRow label="Auto-Refine" description="Automatically refine results for better quality">
+                    <SettingRow label="Auto-Refine" description="Automatically refine results for better quality. This triggers an extra LLM call using max tokens.">
                         <Toggle enabled={settings.autoRefine} onChange={(v) => updateSetting("autoRefine", v)} />
                     </SettingRow>
                     <SettingRow label="Show Source Links" description="Display source attribution on synthesis cards">
@@ -2044,9 +2040,31 @@ function SectionContent({ sectionId, nodes, onCloseNode, onActivateNode, onClean
         case "privacy":
             return (
                 <div>
-                    <SettingRow label="Cache Synthesis Results" description="Store results locally for faster access">
-                        <Toggle enabled={settings.cacheResults} onChange={(v) => updateSetting("cacheResults", v)} />
+                    <SettingRow label="Smart Tool Shortcuts" description="Learn your tool usage patterns and execute repeat commands instantly without using the LLM. Saves tokens and reduces latency.">
+                        <Toggle enabled={settings.enableIntentCache} onChange={(v) => updateSetting("enableIntentCache", v)} />
                     </SettingRow>
+                    {settings.enableIntentCache && (
+                        <>
+                            <SettingRow label="Cache Confidence" description={`Similarity threshold for shortcut activation (${(settings.intentCacheThreshold * 100).toFixed(0)}%). Higher = more conservative.`}>
+                                <div className="w-32">
+                                    <Slider value={settings.intentCacheThreshold * 100} onChange={(v) => updateSetting("intentCacheThreshold", v / 100)} min={80} max={99} color="#f472b6" />
+                                </div>
+                            </SettingRow>
+                            <SettingRow label="Clear Shortcut Cache" description="Wipe all learned intent shortcuts from the local database.">
+                                <button
+                                    onClick={async () => {
+                                        try {
+                                            const { invoke } = await import("@tauri-apps/api/core");
+                                            await invoke("clear_intent_cache");
+                                        } catch (_) { }
+                                    }}
+                                    className="px-3 py-1.5 text-[11px] font-medium rounded-lg bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25 active:scale-95 transition-all"
+                                >
+                                    Clear Cache
+                                </button>
+                            </SettingRow>
+                        </>
+                    )}
                 </div>
             );
 
@@ -2312,12 +2330,114 @@ const SETTINGS_WINDOW_WIDTH = 920;
 const SETTINGS_WINDOW_HEIGHT = 640;
 const SETTINGS_MIN_WIDTH = 640;
 const SETTINGS_MIN_HEIGHT = 480;
+/* ─── Manage Spaces Dialog ─── */
+function ManageSpacesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+    const { settings, updateSetting } = useSettings();
+    const [newSpaceLabel, setNewSpaceLabel] = useState("");
+    const [editingSpaceId, setEditingSpaceId] = useState<string | null>(null);
+
+    const handleAddSpace = () => {
+        if (!newSpaceLabel.trim()) return;
+        const id = newSpaceLabel.toLowerCase().replace(/\s+/g, "-");
+        if (settings.spaces.some(s => s.id === id)) return;
+
+        const newSpace = {
+            id,
+            label: newSpaceLabel,
+            icon: "Layers",
+            color: "#60a5fa"
+        };
+        updateSetting("spaces", [...settings.spaces, newSpace]);
+        setNewSpaceLabel("");
+    };
+
+    const handleDeleteSpace = (id: string) => {
+        if (settings.spaces.length <= 1) return;
+        updateSetting("spaces", settings.spaces.filter(s => s.id !== id));
+        if (settings.defaultSpace === id) {
+            updateSetting("defaultSpace", settings.spaces.find(s => s.id !== id)?.id || "");
+        }
+    };
+
+    const handleUpdateSpace = (id: string, updates: Partial<import("@/types/settings").SpaceDefinition>) => {
+        updateSetting("spaces", settings.spaces.map(s => s.id === id ? { ...s, ...updates } : s));
+    };
+
+    return (
+        <AnimatePresence>
+            {isOpen && (
+                <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4">
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={onClose}
+                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                    />
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                        className="relative w-full max-w-md glass-elevated border-theme rounded-3xl overflow-hidden shadow-2xl"
+                    >
+                        <div className="p-6">
+                            <div className="flex items-center justify-between mb-6">
+                                <h3 className="text-sm font-bold uppercase tracking-widest text-theme-accent">Manage Spaces</h3>
+                                <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors">
+                                    <X size={16} />
+                                </button>
+                            </div>
+
+                            <div className="space-y-4 max-h-[400px] overflow-y-auto mb-6 pr-2">
+                                {settings.spaces.map((s) => (
+                                    <div key={s.id} className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+                                            <span className="text-xs font-medium">{s.label}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                onClick={() => handleDeleteSpace(s.id)}
+                                                className="p-1.5 hover:bg-red-500/10 text-red-400 rounded-lg transition-colors"
+                                                disabled={settings.spaces.length <= 1}
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={newSpaceLabel}
+                                    onChange={(e) => setNewSpaceLabel(e.target.value)}
+                                    placeholder="New space name..."
+                                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-theme-accent transition-colors"
+                                    onKeyDown={(e) => e.key === "Enter" && handleAddSpace()}
+                                />
+                                <button
+                                    onClick={handleAddSpace}
+                                    className="px-4 py-2 bg-theme-accent text-white rounded-xl text-xs font-bold hover:brightness-110 active:scale-95 transition-all"
+                                >
+                                    Add
+                                </button>
+                            </div>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
+        </AnimatePresence>
+    );
+}
 
 /* ─── Main Settings View ─── */
 export function SettingsView({ isOpen, onClose, initialSectionId, spaceId, nodes, onCloseNode, onActivateNode, onCleanupStuckNodes, onCloseAllSpaceNodes }: SettingsViewProps) {
     const { settings } = useSettings();
     const { user } = useAuth();
     const [activeSection, setActiveSection] = useState("ai");
+    const [manageSpacesOpen, setManageSpacesOpen] = useState(false);
     const visibleSections = useMemo(
         () => SECTIONS.filter((s) => s.id !== "users" || user?.role === "super_admin"),
         [user?.role]
@@ -2525,6 +2645,7 @@ export function SettingsView({ isOpen, onClose, initialSectionId, spaceId, nodes
                                         onActivateNode={onActivateNode}
                                         onCleanupStuckNodes={onCleanupStuckNodes}
                                         onCloseAllSpaceNodes={onCloseAllSpaceNodes}
+                                        setManageSpacesOpen={setManageSpacesOpen}
                                     />
                                 </motion.div>
                             </AnimatePresence>
@@ -2544,6 +2665,7 @@ export function SettingsView({ isOpen, onClose, initialSectionId, spaceId, nodes
                     )}
                 </motion.div>
             )}
+            <ManageSpacesDialog isOpen={manageSpacesOpen} onClose={() => setManageSpacesOpen(false)} />
         </AnimatePresence>
     );
 }
@@ -2551,6 +2673,7 @@ export function SettingsView({ isOpen, onClose, initialSectionId, spaceId, nodes
 function UsersSection() {
     const { user, impersonating, impersonate, listUsers, logout } = useAuth();
     const { activeProfileId, clearAllProfilesForFirstRun } = useProfile();
+    const { settings } = useSettings();
     const setNodes = useNodesStore((s) => s.setNodes);
     const setEdges = useNodesStore((s) => s.setEdges);
     const setActiveNodeId = useNodesStore((s) => s.setActiveNodeId);
@@ -2614,7 +2737,7 @@ function UsersSection() {
             setNodes([]);
             setEdges([]);
             setActiveNodeId(null);
-            setConversationHistory({ work: [], entertainment: [], research: [] });
+            setConversationHistory(Object.fromEntries(settings.spaces.map(s => [s.id, []])));
             setOsConversationHistory([]);
             setTasks(new Map());
 

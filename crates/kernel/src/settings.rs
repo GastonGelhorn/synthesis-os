@@ -315,6 +315,9 @@ pub struct KernelConfig {
     // ── Tool RAG (Single-Agent Loop) ──
     pub tool_rag_enabled: bool,
     pub tool_rag_top_k: usize,
+    // ── Intent Cache (Semantic Tool Shortcuts) ──
+    pub enable_intent_cache: bool,
+    pub intent_cache_threshold: f32,
 }
 
 impl Default for KernelConfig {
@@ -343,6 +346,8 @@ impl Default for KernelConfig {
             reflection_model: Some("gpt-5-mini".to_string()),
             tool_rag_enabled: true,
             tool_rag_top_k: 12,
+            enable_intent_cache: true,
+            intent_cache_threshold: 0.93,
         }
     }
 }
@@ -452,6 +457,14 @@ pub fn get_kernel_config(app_handle: &AppHandle) -> KernelConfig {
             .get("toolRagTopK")
             .and_then(|v| v.as_u64())
             .unwrap_or(12) as usize,
+        enable_intent_cache: obj
+            .get("enableIntentCache")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true),
+        intent_cache_threshold: obj
+            .get("intentCacheThreshold")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.90) as f32,
     }
 }
 

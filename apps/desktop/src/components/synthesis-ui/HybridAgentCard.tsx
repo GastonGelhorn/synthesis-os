@@ -54,6 +54,10 @@ interface HybridAgentCardProps {
     onContinueConversation?: (message: string) => void;
     /** Whether this card is the active/focused one (shows footer input when true and completed) */
     isActive?: boolean;
+    /** Array of source citations to display */
+    sources?: string[];
+    /** Whether the user has enabled source links in settings */
+    showSourceLinks?: boolean;
 }
 
 // ── Phase detection from logs/reasoning ──
@@ -847,6 +851,8 @@ export const HybridAgentCard = React.memo(function HybridAgentCard({
     onAnswer,
     onContinueConversation,
     isActive = false,
+    sources,
+    showSourceLinks,
 }: HybridAgentCardProps) {
     const [timelineExpanded, setTimelineExpanded] = useState(false);
     const isLight = themeCategory === "light";
@@ -1192,6 +1198,20 @@ export const HybridAgentCard = React.memo(function HybridAgentCard({
                             ) : (
                                 <PhaseIndicator key="phase" phase={currentPhase} isLight={isLight} isStreaming={false} />
                             )
+                        )}
+
+                        {/* Sources (if enabled and available) */}
+                        {showSourceLinks && sources && sources.length > 0 && (
+                            <div className={cn("mt-4 pt-3 border-t", isLight ? "border-slate-200/50" : "border-white/5")}>
+                                <p className={cn("text-[10px] font-medium mb-1.5", isLight ? "text-slate-400" : "text-white/40")}>Sources</p>
+                                <div className="space-y-1">
+                                    {sources.map((src, i) => (
+                                        <p key={i} className={cn("text-[11px] font-mono truncate", isLight ? "text-slate-500 hover:text-blue-500 cursor-pointer" : "text-white/50 hover:text-blue-400 cursor-pointer")} onClick={() => typeof window !== 'undefined' && window.open(src, '_blank')}>
+                                            {src}
+                                        </p>
+                                    ))}
+                                </div>
+                            </div>
                         )}
                     </AnimatePresence>
 

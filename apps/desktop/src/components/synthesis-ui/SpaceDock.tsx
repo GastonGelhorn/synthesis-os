@@ -15,12 +15,14 @@ import {
     Search,
     BookOpen,
     Database,
-    Cpu
+    Cpu,
+    HardDrive
 } from "lucide-react";
 import { SpaceId, WidgetKind } from "@/types/synthesis";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/context/SettingsContext";
 import { GlassContainer } from "./GlassContainer";
+import * as LucideIcons from "lucide-react";
 
 /* ─── Space Definitions ─── */
 interface SpaceDef {
@@ -31,29 +33,7 @@ interface SpaceDef {
     glow: string;
 }
 
-const SPACES: SpaceDef[] = [
-    {
-        id: "work",
-        label: "Work",
-        icon: Briefcase,
-        color: "#60a5fa",
-        glow: "rgba(96, 165, 250, 0.35)",
-    },
-    {
-        id: "entertainment",
-        label: "Play",
-        icon: Gamepad2,
-        color: "#f472b6",
-        glow: "rgba(244, 114, 182, 0.35)",
-    },
-    {
-        id: "research",
-        label: "Research",
-        icon: FlaskConical,
-        color: "#34d399",
-        glow: "rgba(52, 211, 153, 0.35)",
-    },
-];
+
 
 /* ─── Context Tools Definitions ─── */
 interface ContextTool {
@@ -72,13 +52,13 @@ function SpaceItem({
     iconSize,
     onClick,
 }: {
-    space: SpaceDef;
+    space: import("@/types/settings").SpaceDefinition & { glow: string; iconComponent: React.ComponentType<any> };
     isActive: boolean;
     nodeCount: number;
     iconSize: number;
     onClick: () => void;
 }) {
-    const Icon = space.icon;
+    const Icon = space.iconComponent;
     return (
         <motion.button
             onClick={onClick}
@@ -173,6 +153,7 @@ interface SpaceDockProps {
     onSynthesize?: (query: string) => void;
     onFocusInput?: () => void;
     onToggleHUD?: () => void;
+    onOpenFileBrowser?: () => void;
 }
 
 /**
@@ -188,7 +169,8 @@ export function SpaceDock({
     onToggleChat,
     onSynthesize,
     onFocusInput,
-    onToggleHUD
+    onToggleHUD,
+    onOpenFileBrowser,
 }: SpaceDockProps) {
     const { settings } = useSettings();
     const iconSizeMap = {
@@ -197,6 +179,14 @@ export function SpaceDock({
         large: { space: 22, tool: 18 },
     };
     const sizes = iconSizeMap[settings.sidebarIconSize || "medium"];
+
+    const mappedSpaces = useMemo(() => {
+        return settings.spaces.map(s => ({
+            ...s,
+            glow: `${s.color}59`, // hex + opacity for glow
+            iconComponent: (LucideIcons as any)[s.icon] || LucideIcons.HelpCircle
+        }));
+    }, [settings.spaces]);
 
     const contextTools = useMemo<ContextTool[]>(() => {
         switch (activeSpaceId) {
@@ -232,7 +222,7 @@ export function SpaceDock({
         >
             <GlassContainer
                 className="flex flex-col items-center py-2"
-                style={{ width: 58, height: 590 }}
+                style={{ width: 58, height: 640 }}
                 borderRadius={24}
                 blur="6px"
                 saturation="150%"
@@ -241,7 +231,7 @@ export function SpaceDock({
                 <nav className="flex flex-col gap-3 w-full px-2">
                     {/* Spaces */}
                     <div className="flex flex-col gap-2.5">
-                        {SPACES.map((space) => (
+                        {mappedSpaces.map((space) => (
                             <SpaceItem
                                 key={space.id}
                                 space={space}
@@ -297,6 +287,18 @@ export function SpaceDock({
                             <Clock size={sizes.tool} className="text-emerald-400 group-hover:text-emerald-300 transition-colors" />
                             <div className="dock-tooltip">
                                 Recall
+                            </div>
+                        </motion.button>
+                        <motion.button
+                            onClick={onOpenFileBrowser}
+                            whileHover={{ x: 2 }}
+                            whileTap={{ scale: 0.95 }}
+                            aria-label="Open storage"
+                            className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors hover:bg-white/5 group relative"
+                        >
+                            <HardDrive size={sizes.tool} className="text-amber-400 group-hover:text-amber-300 transition-colors" />
+                            <div className="dock-tooltip">
+                                Storage
                             </div>
                         </motion.button>
                         <motion.button

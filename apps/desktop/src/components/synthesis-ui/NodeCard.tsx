@@ -165,145 +165,147 @@ export function NodeCard({
         >
             {/* Title bar — drag handle (hidden when chrome="none" to avoid duplication with NodeContainer) */}
             {chrome !== "none" && (
-            <div
-                onPointerDown={onTitleBarPointerDown}
-                className={cn(
-                    settings.compactMode ? "h-8 px-3" : "h-9 px-3.5",
-                    "window-chrome shrink-0 flex items-center justify-between select-none cursor-grab active:cursor-grabbing",
-                    isFocusSurface ? "window-chrome--focus" : "window-chrome--background",
-                )}
-            >
-                <div className="flex gap-1.5 items-center shrink-0">
-                    <button
-                        onClick={() => {
-                            if (settings.soundEffects) playSound("click", settings.volume);
-                            onClose();
-                        }}
-                        title="Close"
-                        className={cn(
-                            "window-chrome-button h-6 w-6 rounded-full flex items-center justify-center transition-colors",
-                            settings.theme === "light"
-                                ? "text-black/65 hover:text-black/85 hover:bg-black/[0.08]"
-                                : "text-white/70 hover:text-white/95 hover:bg-white/[0.1]",
-                        )}
-                    >
-                        <X size={10} strokeWidth={2.6} />
-                    </button>
-                    <button
-                        onClick={() => {
-                            if (settings.soundEffects) playSound("click", settings.volume);
-                            onMinimize();
-                        }}
-                        title="Minimize"
-                        className={cn(
-                            "window-chrome-button h-6 w-6 rounded-full flex items-center justify-center transition-colors",
-                            settings.theme === "light"
-                                ? "text-black/65 hover:text-black/85 hover:bg-black/[0.08]"
-                                : "text-white/70 hover:text-white/95 hover:bg-white/[0.1]",
-                        )}
-                    >
-                        <Minus size={11} strokeWidth={2.6} />
-                    </button>
-                </div>
-                <div className={cn(
-                    "text-[11px] font-semibold truncate px-4 max-w-[60%] select-none pointer-events-none",
-                    settings.theme === "light" ? "text-black/78" : "text-white/86",
-                )}>
-                    {node.title}
-                </div>
-                <div className={`text-[10px] ${settings.theme === "light" ? "text-black/52" : "text-white/58"} flex items-center gap-1`}>
-                    {onStartLink && (
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onStartLink(); }}
-                            className={cn(
-                                "p-1.5 rounded-md transition-colors",
-                                settings.theme === "light" ? "hover:bg-black/[0.08]" : "hover:bg-white/[0.1]",
-                            )}
-                            title="Link to another node"
-                        >
-                            <Link2 size={11} />
-                        </button>
+                <div
+                    onPointerDown={onTitleBarPointerDown}
+                    className={cn(
+                        settings.compactMode ? "h-8 px-3" : "h-9 px-3.5",
+                        "window-chrome shrink-0 flex items-center justify-between select-none cursor-grab active:cursor-grabbing",
+                        isFocusSurface ? "window-chrome--focus" : "window-chrome--background",
                     )}
-                    <div className="relative" ref={exportMenuRef}>
+                >
+                    <div className="flex gap-1.5 items-center shrink-0">
                         <button
-                            onClick={(e) => { e.stopPropagation(); setExportMenuOpen(!exportMenuOpen); }}
+                            onClick={() => {
+                                if (settings.soundEffects) playSound("click", settings.volume);
+                                onClose();
+                            }}
+                            title="Close"
                             className={cn(
-                                "p-1.5 rounded-md transition-colors",
-                                settings.theme === "light" ? "hover:bg-black/[0.08]" : "hover:bg-white/[0.1]",
+                                "window-chrome-button h-6 w-6 rounded-full flex items-center justify-center transition-colors",
+                                settings.theme === "light"
+                                    ? "text-black/65 hover:text-black/85 hover:bg-black/[0.08]"
+                                    : "text-white/70 hover:text-white/95 hover:bg-white/[0.1]",
                             )}
-                            title="Export"
-                            aria-label="Export node content"
-                            aria-expanded={exportMenuOpen}
                         >
-                            <Download size={11} />
+                            <X size={10} strokeWidth={2.6} />
                         </button>
-                        <AnimatePresence>
-                            {exportMenuOpen && (
-                                <motion.div
-                                    initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                                    exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                                    transition={{ duration: 0.12 }}
-                                    className={cn(
-                                        "absolute right-0 top-full mt-1 z-50 rounded-xl overflow-hidden py-1 min-w-[160px] glass-elevated border-theme",
-                                    )}
-                                    onClick={(e) => e.stopPropagation()}
-                                >
-                                    <button
-                                        onClick={() => void handleExport("markdown")}
-                                        className={cn(
-                                            "w-full flex items-center gap-2 px-3 py-1.5 text-[11px] transition-colors",
-                                            settings.theme === "light" ? "text-black/70 hover:bg-black/[0.04]" : "text-white/70 hover:bg-white/[0.04]",
-                                        )}
-                                    >
-                                        <FileText size={11} />
-                                        {exportCopied === "markdown" ? "Copied!" : "Copy as Markdown"}
-                                    </button>
-                                    <button
-                                        onClick={() => void handleExport("json")}
-                                        className={cn(
-                                            "w-full flex items-center gap-2 px-3 py-1.5 text-[11px] transition-colors",
-                                            settings.theme === "light" ? "text-black/70 hover:bg-black/[0.04]" : "text-white/70 hover:bg-white/[0.04]",
-                                        )}
-                                    >
-                                        <FileJson size={11} />
-                                        {exportCopied === "json" ? "Copied!" : "Copy as JSON"}
-                                    </button>
-                                    <button
-                                        onClick={() => void handleExport("download-md")}
-                                        className={cn(
-                                            "w-full flex items-center gap-2 px-3 py-1.5 text-[11px] transition-colors",
-                                            settings.theme === "light" ? "text-black/70 hover:bg-black/[0.04]" : "text-white/70 hover:bg-white/[0.04]",
-                                        )}
-                                    >
-                                        <Download size={11} />
-                                        {exportCopied === "download-md" ? "Downloaded!" : "Download .md"}
-                                    </button>
-                                </motion.div>
+                        <button
+                            onClick={() => {
+                                if (settings.soundEffects) playSound("click", settings.volume);
+                                onMinimize();
+                            }}
+                            title="Minimize"
+                            className={cn(
+                                "window-chrome-button h-6 w-6 rounded-full flex items-center justify-center transition-colors",
+                                settings.theme === "light"
+                                    ? "text-black/65 hover:text-black/85 hover:bg-black/[0.08]"
+                                    : "text-white/70 hover:text-white/95 hover:bg-white/[0.1]",
                             )}
-                        </AnimatePresence>
+                        >
+                            <Minus size={11} strokeWidth={2.6} />
+                        </button>
                     </div>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); if (settings.soundEffects) playSound("click", settings.volume); onToggleGodMode(); }}
-                        className={cn(
-                            "p-1.5 rounded-md transition-colors",
-                            node.isGodMode
-                                ? (settings.theme === "light" ? "bg-black/[0.09] text-black/85" : "bg-white/[0.12] text-white/90")
-                                : (settings.theme === "light" ? "hover:bg-black/[0.08] text-black/55 hover:text-black/82" : "hover:bg-white/[0.1] text-white/55 hover:text-white/86"),
-                        )}
-                        title={node.isGodMode ? "Back to content" : "View JSON"}
-                    >
-                        <FileJson size={11} />
-                    </button>
-                    <span className={cn(
-                        "flex items-center gap-1.5 pl-1 font-semibold lowercase",
-                        settings.theme === "light" ? "text-black/58" : "text-white/68",
+                    <div className={cn(
+                        "text-[11px] font-semibold truncate px-4 max-w-[60%] select-none pointer-events-none",
+                        settings.theme === "light" ? "text-black/78" : "text-white/86",
                     )}>
-                        <ShieldCheck size={10} />
-                        {node.type}
-                    </span>
+                        {node.title}
+                    </div>
+                    <div className={`text-[10px] ${settings.theme === "light" ? "text-black/52" : "text-white/58"} flex items-center gap-1`}>
+                        {onStartLink && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onStartLink(); }}
+                                className={cn(
+                                    "p-1.5 rounded-md transition-colors",
+                                    settings.theme === "light" ? "hover:bg-black/[0.08]" : "hover:bg-white/[0.1]",
+                                )}
+                                title="Link to another node"
+                            >
+                                <Link2 size={11} />
+                            </button>
+                        )}
+                        <div className="relative" ref={exportMenuRef}>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setExportMenuOpen(!exportMenuOpen); }}
+                                className={cn(
+                                    "p-1.5 rounded-md transition-colors",
+                                    settings.theme === "light" ? "hover:bg-black/[0.08]" : "hover:bg-white/[0.1]",
+                                )}
+                                title="Export"
+                                aria-label="Export node content"
+                                aria-expanded={exportMenuOpen}
+                            >
+                                <Download size={11} />
+                            </button>
+                            <AnimatePresence>
+                                {exportMenuOpen && (
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                                        transition={{ duration: 0.12 }}
+                                        className={cn(
+                                            "absolute right-0 top-full mt-1 z-50 rounded-xl overflow-hidden py-1 min-w-[160px] glass-elevated border-theme",
+                                        )}
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <button
+                                            onClick={() => void handleExport("markdown")}
+                                            className={cn(
+                                                "w-full flex items-center gap-2 px-3 py-1.5 text-[11px] transition-colors",
+                                                settings.theme === "light" ? "text-black/70 hover:bg-black/[0.04]" : "text-white/70 hover:bg-white/[0.04]",
+                                            )}
+                                        >
+                                            <FileText size={11} />
+                                            {exportCopied === "markdown" ? "Copied!" : "Copy as Markdown"}
+                                        </button>
+                                        <button
+                                            onClick={() => void handleExport("json")}
+                                            className={cn(
+                                                "w-full flex items-center gap-2 px-3 py-1.5 text-[11px] transition-colors",
+                                                settings.theme === "light" ? "text-black/70 hover:bg-black/[0.04]" : "text-white/70 hover:bg-white/[0.04]",
+                                            )}
+                                        >
+                                            <FileJson size={11} />
+                                            {exportCopied === "json" ? "Copied!" : "Copy as JSON"}
+                                        </button>
+                                        <button
+                                            onClick={() => void handleExport("download-md")}
+                                            className={cn(
+                                                "w-full flex items-center gap-2 px-3 py-1.5 text-[11px] transition-colors",
+                                                settings.theme === "light" ? "text-black/70 hover:bg-black/[0.04]" : "text-white/70 hover:bg-white/[0.04]",
+                                            )}
+                                        >
+                                            <Download size={11} />
+                                            {exportCopied === "download-md" ? "Downloaded!" : "Download .md"}
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                        {settings.godMode && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); if (settings.soundEffects) playSound("click", settings.volume); onToggleGodMode(); }}
+                                className={cn(
+                                    "p-1.5 rounded-md transition-colors",
+                                    node.isGodMode
+                                        ? (settings.theme === "light" ? "bg-black/[0.09] text-black/85" : "bg-white/[0.12] text-white/90")
+                                        : (settings.theme === "light" ? "hover:bg-black/[0.08] text-black/55 hover:text-black/82" : "hover:bg-white/[0.1] text-white/55 hover:text-white/86"),
+                                )}
+                                title={node.isGodMode ? "Back to content" : "View JSON"}
+                            >
+                                <FileJson size={11} />
+                            </button>
+                        )}
+                        <span className={cn(
+                            "flex items-center gap-1.5 pl-1 font-semibold lowercase",
+                            settings.theme === "light" ? "text-black/58" : "text-white/68",
+                        )}>
+                            <ShieldCheck size={10} />
+                            {node.type}
+                        </span>
+                    </div>
                 </div>
-            </div>
             )}
 
             <div className="relative flex-1 min-h-0 flex flex-col">
@@ -315,47 +317,49 @@ export function NodeCard({
                         flipped={Boolean(node.isGodMode)}
                         front={
                             <SynthesisCardNodeIdProvider nodeId={node.id} originalQuery={node.query || ""}>
-                            <div className={cn(
-                                "w-full h-full min-h-0 overflow-y-auto overscroll-contain",
-                                isActive ? "select-text" : "select-none",
-                                "scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent hover:scrollbar-thumb-white/30",
-                                "transform-gpu translate-z-0", // Force layer and fix WebKit scroll bug
-                                settings.compactMode && "text-[0.97em]"
-                            )} style={{
-                                WebkitOverflowScrolling: "touch",
-                                ...(settings.lazyLoad ? { contentVisibility: "auto", containIntrinsicSize: "auto 360px" } : {})
-                            }}>
-                                {node.type === "widget" && node.widgetKind ? (
-                                    <WidgetRenderer kind={node.widgetKind} nodeId={node.id} />
-                                ) : node.status === "synthesizing" && node.type !== "agent_task" && !node.content.summary && (!node.content.blocks || node.content.blocks.length === 0) ? (
-                                    <ThinkingCard
-                                        query={node.query}
-                                        steps={node.content.logs || []}
-                                    />
-                                ) : (
-                                    <Suspense fallback={<CardSkeleton compact={settings.compactMode} isLight={settings.theme === "light"} />}>
-                                        <HybridAgentCard
-                                            task={task}
-                                            blocks={node.content.blocks || []}
-                                            title={node.title}
-                                            summary={node.content.summary || ""}
-                                            design={node.content.design}
-                                            compact={settings.compactMode}
-                                            themeCategory={settings.theme}
-                                            streamingReasoning={node.content.streamingReasoning}
-                                            streamingContent={node.content.streamingContent}
-                                            reasoningTimeline={node.content.reasoningTimeline}
-                                            a2uiState={node.content.a2uiState as import("@/lib/a2ui").A2UIState | null | undefined}
-                                            onCancel={onCancelTask}
-                                            onApprove={onApproveStep}
-                                            onReject={onRejectStep}
-                                            onAnswer={onAnswerStep}
-                                            onContinueConversation={onContinueFromCard ? (msg) => onContinueFromCard(node.id, msg) : undefined}
-                                            isActive={isActive}
+                                <div className={cn(
+                                    "w-full h-full min-h-0 overflow-y-auto overscroll-contain",
+                                    isActive ? "select-text" : "select-none",
+                                    "scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent hover:scrollbar-thumb-white/30",
+                                    "transform-gpu translate-z-0", // Force layer and fix WebKit scroll bug
+                                    settings.compactMode && "text-[0.97em]"
+                                )} style={{
+                                    WebkitOverflowScrolling: "touch",
+                                    ...(settings.lazyLoad ? { contentVisibility: "auto", containIntrinsicSize: "auto 360px" } : {})
+                                }}>
+                                    {node.type === "widget" && node.widgetKind ? (
+                                        <WidgetRenderer kind={node.widgetKind} nodeId={node.id} />
+                                    ) : node.status === "synthesizing" && node.type !== "agent_task" && !node.content.summary && (!node.content.blocks || node.content.blocks.length === 0) ? (
+                                        <ThinkingCard
+                                            query={node.query}
+                                            steps={node.content.logs || []}
                                         />
-                                    </Suspense>
-                                )}
-                            </div>
+                                    ) : (
+                                        <Suspense fallback={<CardSkeleton compact={settings.compactMode} isLight={settings.theme === "light"} />}>
+                                            <HybridAgentCard
+                                                task={task}
+                                                blocks={node.content.blocks || []}
+                                                title={node.title}
+                                                summary={node.content.summary || ""}
+                                                design={node.content.design}
+                                                compact={settings.compactMode}
+                                                themeCategory={settings.theme}
+                                                streamingReasoning={node.content.streamingReasoning}
+                                                streamingContent={node.content.streamingContent}
+                                                reasoningTimeline={node.content.reasoningTimeline}
+                                                a2uiState={node.content.a2uiState as import("@/lib/a2ui").A2UIState | null | undefined}
+                                                onCancel={onCancelTask}
+                                                onApprove={onApproveStep}
+                                                onReject={onRejectStep}
+                                                onAnswer={onAnswerStep}
+                                                onContinueConversation={onContinueFromCard ? (msg) => onContinueFromCard(node.id, msg) : undefined}
+                                                isActive={isActive}
+                                                sources={node.content.sources || undefined}
+                                                showSourceLinks={settings.sourceLinks}
+                                            />
+                                        </Suspense>
+                                    )}
+                                </div>
                             </SynthesisCardNodeIdProvider>
                         }
                         back={

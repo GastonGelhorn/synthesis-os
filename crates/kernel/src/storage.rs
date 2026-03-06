@@ -368,27 +368,40 @@ impl StorageManager {
             .lock()
             .map_err(|e| format!("Mutex lock failed: {}", e))?;
 
+        let prefix = if path.is_empty() || path == "/" {
+            "/".to_string()
+        } else {
+            let mut p = path.to_string();
+            if !p.ends_with('/') {
+                p.push('/');
+            }
+            p
+        };
+
         let mut stmt = db
             .prepare(
-                "SELECT name, is_dir, current_version, updated_at
-                 FROM (
-                     SELECT SUBSTR(path, LENGTH(?) + 2) as name, is_dir, current_version, updated_at
-                     FROM files
-                     WHERE agent_id = ? AND path LIKE ? || '%'
-                 )
-                 WHERE name NOT LIKE '%/%'
-                 GROUP BY name",
+                "SELECT 
+                    CASE 
+                        WHEN INSTR(SUBSTR(path, LENGTH(?) + 1), '/') > 0 
+                        THEN SUBSTR(SUBSTR(path, LENGTH(?) + 1), 1, INSTR(SUBSTR(path, LENGTH(?) + 1), '/') - 1)
+                        ELSE SUBSTR(path, LENGTH(?) + 1)
+                    END as name,
+                    CASE 
+                        WHEN INSTR(SUBSTR(path, LENGTH(?) + 1), '/') > 0 THEN 1
+                        ELSE is_dir
+                    END as computed_is_dir,
+                    MAX(current_version) as current_version,
+                    MAX(updated_at) as updated_at
+                 FROM files
+                 WHERE agent_id = ? AND path LIKE ? || '%' AND path != ?
+                 GROUP BY 1",
             )
             .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 
-        let prefix = if path.is_empty() {
-            "".to_string()
-        } else {
-            path.to_string()
-        };
-
         let entries = stmt
-            .query_map(params![&prefix, agent_id, &prefix], |row| {
+            .query_map(
+                params![&prefix, &prefix, &prefix, &prefix, &prefix, agent_id, &prefix, &prefix],
+                |row| {
                 let is_dir: i32 = row.get(1)?;
                 Ok(StorageEntry {
                     name: row.get(0)?,
@@ -500,10 +513,10 @@ impl StorageManager {
 
         let mut stmt = db
             .prepare(
-                "SELECT version, created_at, size FROM file_versions fv
+                "SELECT fv.version, fv.created_at, fv.size FROM file_versions fv
                  JOIN files f ON fv.file_id = f.id
                  WHERE f.agent_id = ? AND f.path = ?
-                 ORDER BY version DESC",
+                 ORDER BY fv.version DESC",
             )
             .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 

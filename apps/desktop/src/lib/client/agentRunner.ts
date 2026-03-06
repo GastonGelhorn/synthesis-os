@@ -746,6 +746,106 @@ export async function* runAgentClient(
         });
         unlisteners.push(unlistenApprovalReq);
 
+        // 7. intent-cache-hit: Instant shortcut — cache intercepted the query
+        const unlistenCacheHit = await listen<{
+            task_id: string;
+            query: string;
+            tool_name: string;
+            similarity: number;
+        }>("intent-cache-hit", (event) => {
+            const p = event.payload;
+            if (p.task_id !== taskId || finished) return;
+
+            push({
+                type: "step_started",
+                taskId,
+                step: {
+                    id: `step-${stepIndex}`,
+                    taskId,
+                    index: stepIndex,
+                    type: "tool_call",
+                    status: "running",
+                    toolName: p.tool_name,
+                    toolInput: `⚡ Shortcut (${Math.round(p.similarity * 100)}% match)`,
+                },
+            } as AgentSSEEvent);
+        });
+        unlisteners.push(unlistenCacheHit);
+
+        // 8. intent-cache-result: Tool executed via cache shortcut — finalize
+        const unlistenCacheResult = await listen<{
+            task_id: string;
+            tool_name: string;
+            result: string;
+            success: boolean;
+        }>("intent-cache-result", (event) => {
+            const p = event.payload;
+            if (p.task_id !== taskId || finished) return;
+
+            // Mark tool step complete
+            push({
+                type: "step_completed",
+                taskId,
+                step: {
+                    id: `step-${stepIndex}`,
+                    taskId,
+                    index: stepIndex,
+                    type: "tool_call",
+                    status: "completed",
+                    toolName: p.tool_name,
+                    toolInput: "",
+                    toolResult: {
+                        success: p.success,
+                        text: p.result.slice(0, 200),
+                        durationMs: 0,
+                    },
+                    completedAt: Date.now(),
+                },
+            } as AgentSSEEvent);
+
+            push({
+                type: "agent_tool_result",
+                taskId,
+                toolName: p.tool_name,
+                toolInput: "",
+                resultText: p.result,
+                success: p.success,
+                stepIndex: 0,
+            } as AgentToolResultEvent);
+
+            // Emit card or conversation message
+            if (isOsMode) {
+                push({
+                    type: "conversation_message",
+                    text: p.success ? p.result : `Tool error: ${p.result}`,
+                    query: query,
+                    taskId,
+                } as import("@/lib/agent/types").AgentSSEEvent);
+            } else {
+                push({
+                    type: "card_generated",
+                    card: {
+                        type: "agent_task",
+                        title: query,
+                        summary: p.success ? `⚡ ${p.tool_name}` : `Error: ${p.result}`,
+                        blocks: [{ type: "text_block", style: "body", content: p.result }],
+                    },
+                    sources: [],
+                    hadA2UIMessages: false,
+                } as CardGeneratedEvent);
+            }
+
+            push({
+                type: "task_completed",
+                taskId,
+                totalSteps: 1,
+                durationMs: Date.now() - taskStartTime,
+            } as AgentSSEEvent);
+
+            finished = true;
+        });
+        unlisteners.push(unlistenCacheResult);
+
     } else {
         // Remote client (e.g. iPad): receive events via HTTP SSE
         const url = getKernelEventsUrl(taskId);

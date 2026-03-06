@@ -98,68 +98,80 @@ end tell"#,
         unread_only: bool,
     ) -> Result<Vec<EmailMessage>, String> {
         let max = max.min(25);
-        let unread_filter_start = if unread_only {
-            "if msgRead is false then"
+        let unread_filter = if unread_only {
+            "whose read status is false"
         } else {
             ""
         };
-        let unread_filter_end = if unread_only { "end if" } else { "" };
+
+        // If it's INBOX, we use the global 'inbox' keyword which is account-agnostic and localization-agnostic.
+        // Otherwise we look for a specific mailbox name.
+        let target_mailbox = if mailbox.to_uppercase() == "INBOX" {
+            "inbox".to_string()
+        } else {
+            format!(r#"mailbox "{mailbox}""#, mailbox = escape_as(mailbox))
+        };
 
         let script = format!(
             r#"
 tell application "Mail"
     set msgList to {{}}
-    set targetMailbox to inbox
-    repeat with acct in accounts
-        try
-            set targetMailbox to mailbox "{mailbox}" of acct
-            exit repeat
-        end try
-    end repeat
-
-    set msgCount to count of messages of targetMailbox
+    set targetMbox to {target_mailbox}
+    
+    set msgCount to count of messages of targetMbox
+    if msgCount is 0 then return ""
+    
     set fetchCount to {max}
     if fetchCount > msgCount then set fetchCount to msgCount
 
     repeat with i from 1 to fetchCount
-        set msg to message i of targetMailbox
-        set msgSubject to subject of msg
-        set msgSender to sender of msg
-        set msgDate to date received of msg
-        set msgRead to read status of msg
-        {unread_filter_start}
-        set msgExcerpt to ""
         try
-            set msgExcerpt to (text 1 thru 150 of (content of msg))
-        on error
-            try
-                set msgExcerpt to content of msg
-            end try
+            set msg to message i of targetMbox
+            set msgId to id of msg
+            set msgSubject to subject of msg
+            set msgSender to sender of msg
+            set msgDate to (date received of msg) as string
+            set msgRead to read status of msg
+            
+            if {unread_only} and msgRead then
+                -- skip
+            else
+                set msgExcerpt to ""
+                try
+                    set msgExcerpt to (text 1 thru 200 of (content of msg))
+                on error
+                    try
+                        set msgExcerpt to content of msg
+                    end try
+                end try
+                set end of msgList to (msgId as string) & "|||" & msgSubject & "|||" & msgSender & "|||" & msgDate & "|||" & (msgRead as string) & "|||" & msgExcerpt
+            end if
         end try
-        set end of msgList to msgSubject & "|||" & msgSender & "|||" & (msgDate as string) & "|||" & msgRead & "|||" & msgExcerpt
-        {unread_filter_end}
     end repeat
 
-    set AppleScript's text item delimiters to "\n"
+    set AppleScript's text item delimiters to "%%%"
     return msgList as string
 end tell"#,
-            mailbox = escape_as(mailbox)
         );
 
         let stdout = applescript::run(&script).await?;
+        if stdout.is_empty() {
+            return Ok(vec![]);
+        }
+
         let messages = stdout
-            .trim()
-            .lines()
+            .split("%%%")
             .filter(|s| !s.is_empty())
             .filter_map(|line| {
-                let parts: Vec<&str> = line.splitn(5, "|||").collect();
-                if parts.len() >= 4 {
+                let parts: Vec<&str> = line.splitn(6, "|||").collect();
+                if parts.len() >= 5 {
                     Some(EmailMessage {
-                        subject: parts[0].trim().to_string(),
-                        from: parts[1].trim().to_string(),
-                        date: parts[2].trim().to_string(),
-                        read: parts[3].trim() == "true",
-                        preview: parts.get(4).unwrap_or(&"").trim().to_string(),
+                        id: parts[0].trim().to_string(),
+                        subject: parts[1].trim().to_string(),
+                        from: parts[2].trim().to_string(),
+                        date: parts[3].trim().to_string(),
+                        read: parts[4].trim().to_lowercase() == "true",
+                        preview: parts.get(5).unwrap_or(&"").trim().to_string(),
                     })
                 } else {
                     None
@@ -167,6 +179,29 @@ end tell"#,
             })
             .collect();
         Ok(messages)
+    }
+
+    async fn email_read(&self, message_id: &str) -> Result<String, String> {
+        let script = format!(
+            r#"
+tell application "Mail"
+    repeat with acct in accounts
+        try
+            set msg to (first message of (every mailbox of acct) whose id is {id})
+            return content of msg
+        end try
+    end repeat
+    -- fallback to global search if account search fails
+    try
+        set msg to (first message of inbox whose id is {id})
+        return content of msg
+    end try
+    return "Message not found"
+end tell"#,
+            id = message_id
+        );
+
+        applescript::run(&script).await
     }
 
     // ── Calendar ────────────────────────────────────────────────────

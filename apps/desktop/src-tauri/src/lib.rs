@@ -185,6 +185,160 @@ async fn submit_agent_task(
         }
     }
 
+    // ── Intent Cache Interceptor ──
+    // Check if a semantically similar query was already executed successfully.
+    // If so, emit intent-cache-hit and skip the full Agent pipeline.
+    let kconfig = kernel::settings::get_kernel_config(&app_handle);
+    if kconfig.enable_intent_cache {
+        let app_dir = app_handle
+            .path()
+            .app_data_dir()
+            .unwrap_or_else(|_| std::path::PathBuf::from("/tmp/synthesis-os"));
+        let db_path = app_dir.join("lancedb");
+        if let Ok(conn) = kernel::intent_cache::connect_db(&db_path)
+            .await
+        {
+            if let Ok(cache) = kernel::intent_cache::IntentCache::init(&conn).await {
+                if let Ok(Some(intent)) = cache
+                    .find_intent(&query, kconfig.intent_cache_threshold)
+                    .await
+                {
+                    println!(
+                        "[Kernel] Intent Cache HIT: '{}' -> tool='{}' (sim={:.3})",
+                        &query[..query.len().min(60)],
+                        intent.tool_name,
+                        intent.similarity,
+                    );
+                    let tid = task_id
+                        .clone()
+                        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                    let _ = app_handle.emit(
+                        "intent-cache-hit",
+                        serde_json::json!({
+                            "task_id": tid,
+                            "query": query,
+                            "tool_name": intent.tool_name,
+                            "tool_schema": intent.tool_schema,
+                            "example_input": intent.example_input,
+                            "original_query": intent.original_query,
+                            "similarity": intent.similarity,
+                        }),
+                    );
+
+                    // ── Micro-LLM: Extract arguments from the NEW query ──
+                    // The cached intent tells us WHICH tool, but we need fresh args.
+                    let extract_prompt = format!(
+                        "You are an expert tool argument extractor.\n\n\
+                         I will give you a tool name, an example of its arguments, and a user request.\n\
+                         If the user request is NOT RELATED or NOT COMPATIBLE with the tool, output EXACTLY the string \"null\".\n\
+                         Otherwise, extract the arguments from the request and output ONLY the JSON object. No explanation.\n\n\
+                         Tool: {}\n\
+                         Example: {}\n\
+                         Request: {}",
+                        intent.tool_name, intent.example_input, query
+                    );
+
+                    let (llm_tx, llm_rx) = tokio::sync::oneshot::channel();
+                    let _ = state
+                        .syscall_tx
+                        .send(kernel::syscall::Syscall::LlmRequest {
+                            agent_id: tid.clone(),
+                            priority: kernel::syscall::Priority::High,
+                            prompt: extract_prompt,
+                            response_tx: llm_tx,
+                            system_prompt: Some(
+                                "Output ONLY valid JSON or the string \"null\". No markdown, no explanation.".to_string(),
+                            ),
+                            tool_definitions: Some(vec![]),
+                            model: Some(kconfig.extractor_model.clone()),
+                            stream: false,
+                            max_tokens: Some(100),
+                            max_completion_tokens: Some(100),
+                        })
+                        .await;
+
+                    let extracted_args = match llm_rx.await {
+                        Ok(resp) => match resp.data {
+                            Ok(val) => {
+                                let raw = val.as_str().unwrap_or("").trim().to_string();
+                                // Check for rejection
+                                if raw.to_lowercase().contains("null") {
+                                    println!("[IntentCache] Match REJECTED by extractor for tool: {}", intent.tool_name);
+                                    String::new()
+                                } else {
+                                    // Strip markdown fences if present
+                                    let cleaned = raw
+                                        .strip_prefix("```json")
+                                        .or_else(|| raw.strip_prefix("```"))
+                                        .unwrap_or(&raw);
+                                    let cleaned = cleaned
+                                        .strip_suffix("```")
+                                        .unwrap_or(cleaned)
+                                        .trim()
+                                        .to_string();
+                                    // Validate it's actual JSON
+                                    if serde_json::from_str::<serde_json::Value>(&cleaned).is_ok() {
+                                        println!(
+                                            "[IntentCache] Extracted args: {}",
+                                            &cleaned[..cleaned.len().min(80)]
+                                        );
+                                        cleaned
+                                    } else {
+                                        println!(
+                                            "[IntentCache] Arg extraction not valid JSON, falling back to Agent"
+                                        );
+                                        // Fall through to normal agent
+                                        String::new()
+                                    }
+                                }
+                            }
+                            Err(_) => String::new(),
+                        },
+                        Err(_) => String::new(),
+                    };
+
+                    // If extraction failed, fall through to normal Agent
+                    if extracted_args.is_empty() {
+                        // Don't return — let normal agent handle it
+                    } else {
+                        // Execute the tool with the freshly extracted args
+                        let (tool_tx, tool_rx) = tokio::sync::oneshot::channel();
+                        let _ = state
+                            .syscall_tx
+                            .send(kernel::syscall::Syscall::ToolRequest {
+                                agent_id: tid.clone(),
+                                priority: kernel::syscall::Priority::Normal,
+                                tool_name: intent.tool_name.clone(),
+                                args: extracted_args,
+                                response_tx: tool_tx,
+                            })
+                            .await;
+
+                        let tool_result = match tool_rx.await {
+                            Ok(resp) => match resp.data {
+                                Ok(val) => val.as_str().unwrap_or("OK").to_string(),
+                                Err(e) => format!("Tool Error: {}", e),
+                            },
+                            Err(_) => "Tool execution failed".to_string(),
+                        };
+
+                        let _ = app_handle.emit(
+                            "intent-cache-result",
+                            serde_json::json!({
+                                "task_id": tid,
+                                "tool_name": intent.tool_name,
+                                "result": tool_result,
+                                "success": !tool_result.contains("Error"),
+                            }),
+                        );
+
+                        return Ok(tid);
+                    }
+                }
+            }
+        }
+    }
+
     // Spawn the agent process in Tokio, passing the Syscall transmitter and app handle
     let task_id = kernel::agent::BaseAgent::spawn(
         query,
@@ -548,7 +702,7 @@ async fn list_storage(
     state
         .syscall_tx
         .send(kernel::syscall::Syscall::StorageList {
-            agent_id: "settings".to_string(),
+            agent_id: "user".to_string(),
             path,
             response_tx: tx,
         })
@@ -570,7 +724,7 @@ async fn read_storage(
     state
         .syscall_tx
         .send(kernel::syscall::Syscall::StorageRead {
-            agent_id: "settings".to_string(),
+            agent_id: "user".to_string(),
             path,
             response_tx: tx,
         })
@@ -670,6 +824,18 @@ async fn delete_all_memories(
         .map_err(|e| format!("Failed to send syscall: {}", e))?;
     let resp = rx.await.map_err(|e| format!("No response: {}", e))?;
     resp.data.map(|_| ()).map_err(|e| e)
+}
+
+#[tauri::command]
+async fn clear_intent_cache(app_handle: tauri::AppHandle) -> Result<(), String> {
+    let app_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("No app dir: {}", e))?;
+    let db_path = app_dir.join("lancedb");
+    kernel::intent_cache::clear_table(&db_path).await?;
+    println!("[IntentCache] Cache cleared via Tauri command.");
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -995,6 +1161,7 @@ pub fn run() {
             delete_all_memories,
             reset_all_data,
             get_all_tools,
+            clear_intent_cache,
             // Native SpaceDock
             commands::spacedock_native::create_native_dock,
             commands::spacedock_native::destroy_native_dock,

@@ -37,6 +37,7 @@ pub struct NoteItem {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EmailMessage {
+    pub id: String,
     pub subject: String,
     pub from: String,
     pub date: String,
@@ -141,6 +142,10 @@ pub trait AppBridge: Send + Sync {
         max: u32,
         unread_only: bool,
     ) -> impl std::future::Future<Output = Result<Vec<EmailMessage>, String>> + Send;
+    fn email_read(
+        &self,
+        message_id: &str,
+    ) -> impl std::future::Future<Output = Result<String, String>> + Send;
 
     // Calendar
     fn calendar_today(

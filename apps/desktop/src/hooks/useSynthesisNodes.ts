@@ -51,7 +51,15 @@ export function useSynthesisNodes(settings: SynthesisSettings) {
                         setActiveSpaceId(parsed.activeSpaceId as SpaceId);
                     }
                     if (parsed.conversationHistory && typeof parsed.conversationHistory === "object") {
-                        setConversationHistory((prev) => ({ ...prev, ...(parsed.conversationHistory as Partial<SpaceConversationHistory>) }));
+                        setConversationHistory((prev) => {
+                            const newHistory = { ...prev };
+                            Object.entries(parsed.conversationHistory as Record<string, unknown>).forEach(([key, val]) => {
+                                if (Array.isArray(val)) {
+                                    newHistory[key] = val as ConversationMessage[];
+                                }
+                            });
+                            return newHistory;
+                        });
                     }
                     if (Array.isArray(parsed.edges)) {
                         const validEdges = (parsed.edges as unknown[]).filter(

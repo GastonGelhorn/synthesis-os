@@ -6,6 +6,7 @@ import { WorkspaceView } from "@/components/synthesis-ui/WorkspaceView";
 import { SpaceDock } from "@/components/synthesis-ui/SpaceDock";
 import { MenuBar } from "@/components/synthesis-ui/MenuBar";
 import { SettingsView } from "@/components/synthesis-ui/SettingsView";
+import { FileBrowserView } from "@/components/synthesis-ui/FileBrowserView";
 import { Toast } from "@/components/synthesis-ui/Toast";
 import { CommandPalette } from "@/components/synthesis-ui/CommandPalette";
 import { GenerativeZone } from "@/components/synthesis-ui/GenerativeZone";
@@ -27,11 +28,7 @@ import { useLiquidGlass } from "@/hooks/useLiquidGlass";
 import type { InputBarHandle, InputMode } from "@/components/synthesis-ui/InputBar";
 import { getMetrics } from "@/lib/agent/metrics";
 
-const SPACE_LABELS: Record<SpaceId, string> = {
-    work: "Work",
-    entertainment: "Play",
-    research: "Research",
-};
+
 
 function AuthenticatedApp() {
     const { settings } = useSettings();
@@ -46,6 +43,7 @@ function AuthenticatedApp() {
     const [focusMode, setFocusMode] = useState(false);
     const [edgeHover, setEdgeHover] = useState(false);
     const [hudOpen, setHudOpen] = useState(false);
+    const [fileBrowserOpen, setFileBrowserOpen] = useState(false);
 
     const edgeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -227,8 +225,7 @@ function AuthenticatedApp() {
             return;
         }
         if (useAgent) {
-            const continueNodeId = effectiveMode === "task" && activeNodeId ? activeNodeId : targetNodeId;
-            void handleQuery(query, continueNodeId);
+            void handleQuery(query, targetNodeId);
         } else {
             void handleSearch(query);
         }
@@ -331,6 +328,7 @@ function AuthenticatedApp() {
         onExitFocusMode: exitFocusMode,
         isFocusMode: focusMode,
         isSettingsOpen: settingsOpen || commandPaletteOpen,
+        settings,
     });
 
     const baseResolutionScale = useMemo(() => {
@@ -411,7 +409,7 @@ function AuthenticatedApp() {
                     nodes={nodes}
                     activeNodeId={activeNodeId}
                     spaceId={activeSpaceId}
-                    spaceLabel={SPACE_LABELS[activeSpaceId]}
+                    spaceLabel={settings.spaces.find(s => s.id === activeSpaceId)?.label ?? activeSpaceId}
                     onActivate={activateNode}
                     onClose={closeNode}
                     onMinimize={minimizeNode}
@@ -463,6 +461,7 @@ function AuthenticatedApp() {
                         onSynthesize={handleSubmit}
                         onFocusInput={() => inputBarRef.current?.focus()}
                         onToggleHUD={() => setHudOpen(prev => !prev)}
+                        onOpenFileBrowser={() => setFileBrowserOpen(true)}
                     />
                 </motion.div>
 
@@ -508,6 +507,11 @@ function AuthenticatedApp() {
                     onActivateNode={activateNode}
                     onCleanupStuckNodes={nodeStore.cleanupStuckNodes}
                     onCloseAllSpaceNodes={nodeStore.closeAllSpaceNodes}
+                />
+
+                <FileBrowserView
+                    isOpen={fileBrowserOpen}
+                    onClose={() => setFileBrowserOpen(false)}
                 />
 
                 <CommandPalette
@@ -661,7 +665,7 @@ function AuthenticatedApp() {
                         onCancel={cancelAllActive}
                         mode={inputMode}
                         onModeChange={setInputMode}
-                        activeNodeTitle={activeNodeId ? (nodes.find((n) => n.id === activeNodeId)?.title ?? null) : null}
+                        activeNodeTitle={null}
                         isLoading={isLoading}
                         isWaitingForInput={isWaitingForAnswer}
                         waitingQuestionText={isWaitingForAnswer ? pendingQuestionStep?.reasoning ?? undefined : undefined}

@@ -22,6 +22,56 @@ pub struct BaseAgent {
 }
 
 impl BaseAgent {
+    /// Returns true when the user is explicitly asking for workspace/task recap context.
+    fn is_workspace_context_query(query: &str) -> bool {
+        let q = query.to_lowercase();
+        [
+            "what did we work on",
+            "what have we worked on",
+            "summarize my tasks",
+            "summarize our work",
+            "recap my tasks",
+            "workspace summary",
+            "summarize this workspace",
+            "what's in my workspace",
+            "what is in my workspace",
+            "que hicimos",
+            "qué hicimos",
+            "en que trabajamos",
+            "en qué trabajamos",
+            "resumen de tareas",
+            "resumen del workspace",
+            "resume mi workspace",
+            "que hay en mi workspace",
+            "qué hay en mi workspace",
+        ]
+        .iter()
+        .any(|needle| q.contains(needle))
+    }
+
+    /// Returns true when the user explicitly asks to recall previous conversation turns.
+    fn is_conversation_recall_query(query: &str) -> bool {
+        let q = query.to_lowercase();
+        [
+            "what did i ask",
+            "what did i tell you",
+            "what did we talk about",
+            "previous chat",
+            "last time",
+            "de que hablamos",
+            "de qué hablamos",
+            "que te dije",
+            "qué te dije",
+            "conversacion anterior",
+            "conversación anterior",
+            "ultima vez",
+            "última vez",
+            "chat anterior",
+        ]
+        .iter()
+        .any(|needle| q.contains(needle))
+    }
+
     /// Spawns a new Agent as an isolated Tokio task.
     /// The agent runs continuously until its goal is achieved or it errors out.
     /// If task_id is provided, it is used for frontend correlation; otherwise a new UUID is generated.
@@ -134,35 +184,37 @@ impl BaseAgent {
             }
         }
 
-        if let Some(summaries) = node_summaries {
-            if !summaries.is_empty() {
-                if !memory_context.is_empty() {
-                    memory_context.push_str("\n\n");
-                }
-                memory_context.push_str("### OTHER ACTIVE SPATIAL NODES (lazy loading) ###\n");
-                memory_context.push_str("Active nodes (title, space, createdAt, id). Use get_node_content(node_id) to fetch full summary when needed.\n");
-                for s in summaries {
-                    let id = s.get("id").and_then(|v| v.as_str()).unwrap_or("?");
-                    let title = s
-                        .get("title")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("(no title)");
-                    let space = s.get("spaceId").and_then(|v| v.as_str()).unwrap_or("—");
-                    let created = s
-                        .get("createdAt")
-                        .and_then(|v| v.as_i64())
-                        .map(|ts| {
-                            use chrono::{TimeZone, Utc};
-                            Utc.timestamp_millis_opt(ts)
-                                .single()
-                                .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
-                                .unwrap_or_else(|| "—".to_string())
-                        })
-                        .unwrap_or_else(|| "—".to_string());
-                    memory_context.push_str(&format!(
-                        "  - {} | space: {} | created: {} | id: {}\n",
-                        title, space, created, id
-                    ));
+        if Self::is_workspace_context_query(&initial_goal) {
+            if let Some(summaries) = node_summaries {
+                if !summaries.is_empty() {
+                    if !memory_context.is_empty() {
+                        memory_context.push_str("\n\n");
+                    }
+                    memory_context.push_str("### OTHER ACTIVE SPATIAL NODES (lazy loading) ###\n");
+                    memory_context.push_str("Active nodes (title, space, createdAt, id). Use get_node_content(node_id) to fetch full summary when needed.\n");
+                    for s in summaries {
+                        let id = s.get("id").and_then(|v| v.as_str()).unwrap_or("?");
+                        let title = s
+                            .get("title")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("(no title)");
+                        let space = s.get("spaceId").and_then(|v| v.as_str()).unwrap_or("—");
+                        let created = s
+                            .get("createdAt")
+                            .and_then(|v| v.as_i64())
+                            .map(|ts| {
+                                use chrono::{TimeZone, Utc};
+                                Utc.timestamp_millis_opt(ts)
+                                    .single()
+                                    .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+                                    .unwrap_or_else(|| "—".to_string())
+                            })
+                            .unwrap_or_else(|| "—".to_string());
+                        memory_context.push_str(&format!(
+                            "  - {} | space: {} | created: {} | id: {}\n",
+                            title, space, created, id
+                        ));
+                    }
                 }
             }
         }
@@ -868,6 +920,42 @@ impl BaseAgent {
         // This catches ALL facts from the user message and stores them atomically.
         // Duplicates are prevented by store_fact() dedup (L2 distance < 0.3).
         self.extract_and_store_facts(&initial_goal).await;
+
+        // ── Intent Cache: learn successful tool executions ──
+        let kconfig = settings::get_kernel_config(&self.app_handle);
+        if kconfig.enable_intent_cache && !tool_steps.is_empty() {
+            let app_dir = self
+                .app_handle
+                .path()
+                .app_data_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("/tmp/synthesis-os"));
+            let db_path = app_dir.join("lancedb");
+            if let Ok(conn) = lancedb::connect(db_path.to_str().unwrap_or_default())
+                .execute()
+                .await
+            {
+                if let Ok(cache) = crate::intent_cache::IntentCache::init(&conn).await {
+                    for (tool_name, tool_input, _result) in &tool_steps {
+                        // Find the actual schema for this tool
+                        let schema = rag_filtered_tools
+                            .iter()
+                            .find(|t| t.get("name").and_then(|n| n.as_str()) == Some(tool_name))
+                            .map(|t| t.to_string())
+                            .unwrap_or_else(|| "{}".to_string());
+
+                        if let Err(e) = cache
+                            .learn_intent(&initial_goal, tool_name, &schema, tool_input)
+                            .await
+                        {
+                            println!(
+                                "[Agent:{}] IntentCache learn failed: {}",
+                                self.process_id, e
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Asynchronously analyzes the user's message for personal facts and stores them.
@@ -1033,6 +1121,8 @@ impl BaseAgent {
     /// Fetches relevant long-term memories (user facts, name, etc.) and Core Memory blocks.
     async fn fetch_relevant_memories(&self, query: &str) -> Option<String> {
         let mut final_memories = Vec::new();
+        let allow_conversation_recall =
+            Self::is_conversation_recall_query(query) || Self::is_workspace_context_query(query);
 
         // 1. Fetch Core Memory (Persona & User Profile) - Always included
         for core_key in ["core:persona", "core:user_profile"] {
@@ -1081,7 +1171,20 @@ impl BaseAgent {
                 if let Some(entries) = data.get("entries").and_then(|x| x.as_array()) {
                     let sem_lines: Vec<String> = entries
                         .iter()
-                        .filter_map(|e| e.get("content").and_then(|c| c.as_str()).map(String::from))
+                        .filter_map(|e| {
+                            let category = e
+                                .get("category")
+                                .and_then(|c| c.as_str())
+                                .unwrap_or_default()
+                                .to_lowercase();
+                            let key = e.get("key").and_then(|k| k.as_str()).unwrap_or_default();
+                            let is_archived_conversation =
+                                category == "conversation" || key.starts_with("conversation:");
+                            if is_archived_conversation && !allow_conversation_recall {
+                                return None;
+                            }
+                            e.get("content").and_then(|c| c.as_str()).map(String::from)
+                        })
                         .collect();
 
                     if !sem_lines.is_empty() {
@@ -1359,6 +1462,8 @@ impl BaseAgent {
 
         let approval_key = format!("{}:{}", self.process_id, uuid::Uuid::new_v4());
 
+        let rx = gate.request(approval_key.clone()).await;
+
         let _ = self.emit_status("WAITING_APPROVAL", &format!(
             "Requires approval: {} ({})",
             tool_name,
@@ -1366,8 +1471,6 @@ impl BaseAgent {
         ));
 
         let _ = self.emit_approval_request(&approval_key, tool_name, tool_input, step_index);
-
-        let rx = gate.request(approval_key.clone()).await;
 
         match tokio::time::timeout(std::time::Duration::from_secs(120), rx).await {
             Ok(Ok(approved)) => {

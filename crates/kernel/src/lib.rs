@@ -6,6 +6,7 @@ pub mod commands;
 pub mod context;
 pub mod events_broadcast;
 pub mod http_server;
+pub mod intent_cache;
 pub mod llm_core;
 pub mod local_embeddings;
 pub mod manager;

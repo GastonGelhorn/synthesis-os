@@ -16,6 +16,7 @@ use crate::tools::{
     DefineWord,
     DirList,
     EmailList,
+    EmailRead,
     FileAppend,
     FileCopy,
     // Remember, CoreMemoryTool, CoreMemoryReplace — removed, memory is handled by extract_and_store_facts
@@ -194,6 +195,7 @@ impl Scheduler {
         //   2. Duplicate LLM calls (agent + extractor + reflection for same facts)
         //   3. LLM concatenating multiple facts into one tool call
         tool_manager.register(Box::new(EmailList));
+        tool_manager.register(Box::new(EmailRead));
         tool_manager.register(Box::new(CalendarToday));
         tool_manager.register(Box::new(CalendarCreate));
         tool_manager.register(Box::new(RemindersList));

@@ -17,11 +17,7 @@ import { saveTask, deleteTask, isIndexedDBAvailable } from "@/lib/storage";
 
 export type { SynthesisNode, SynthesisEdge, SpaceId, AgentTask, EphemeralWidget };
 
-const DEFAULT_CONVERSATION_HISTORY: SpaceConversationHistory = {
-    work: [],
-    entertainment: [],
-    research: [],
-};
+const DEFAULT_CONVERSATION_HISTORY: SpaceConversationHistory = {};
 
 export interface NodesStoreSettings {
     clearOnSwitch?: boolean;
@@ -110,6 +106,7 @@ export interface NodesActions {
 
     spawnEphemeralWidget: (type: WidgetType, data?: unknown, title?: string) => void;
     dismissEphemeralWidget: (id: string) => void;
+    setSpaceCache: (cache: Map<SpaceId, SpaceSnapshot>) => void;
 }
 
 export type NodesStore = NodesState & NodesActions;
@@ -192,7 +189,11 @@ export const useNodesStore = create<NodesStore>((set, get) => ({
 
     getTaskForNode: (nodeId) => {
         const tasks = get().tasks;
-        return Array.from(tasks.values()).find((task) => task.nodeId === nodeId);
+        const nodeTasks = Array.from(tasks.values()).filter((task) => task.nodeId === nodeId);
+        if (nodeTasks.length === 0) return undefined;
+        return nodeTasks.reduce((latest, current) =>
+            current.createdAt > latest.createdAt ? current : latest
+        );
     },
 
     getTaskById: (taskId) => get().tasks.get(taskId),
@@ -565,4 +566,5 @@ export const useNodesStore = create<NodesStore>((set, get) => ({
             ephemeralWidgets: state.ephemeralWidgets.filter((w) => w.id !== id),
         }));
     },
+    setSpaceCache: (cache) => set({ spaceCache: cache }),
 }));

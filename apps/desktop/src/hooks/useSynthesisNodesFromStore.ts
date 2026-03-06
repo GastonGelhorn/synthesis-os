@@ -84,6 +84,7 @@ export function useSynthesisNodesFromStore(settings: SynthesisSettings) {
     const removeTask = useNodesStore((s) => s.removeTask);
     const spawnEphemeralWidget = useNodesStore((s) => s.spawnEphemeralWidget);
     const dismissEphemeralWidget = useNodesStore((s) => s.dismissEphemeralWidget);
+    const setSpaceCache = useNodesStore((s) => s.setSpaceCache);
 
     const activeSpaceNodes = useMemo(
         () => nodes.filter((n) => n.spaceId === activeSpaceId),
@@ -91,23 +92,12 @@ export function useSynthesisNodesFromStore(settings: SynthesisSettings) {
     );
 
     const nodeCountBySpace = useMemo(() => {
-        const counts: Record<SpaceId, number> = { work: 0, entertainment: 0, research: 0 };
+        const counts: Record<string, number> = Object.fromEntries(settings.spaces.map(s => [s.id, 0]));
         for (const n of nodes) {
-            if (n.status === "minimized") continue;
-            if (n.status === "synthesizing" && n.type !== "agent_task") continue;
-            if (
-                n.type === "agent_task" &&
-                (n.status === "synthesizing" ||
-                    n.taskStatus === "planning" ||
-                    n.taskStatus === "running" ||
-                    n.taskStatus === "waiting_approval" ||
-                    n.taskStatus === "waiting_answer")
-            )
-                continue;
-            counts[n.spaceId]++;
+            counts[n.spaceId] = (counts[n.spaceId] || 0) + 1;
         }
         return counts;
-    }, [nodes]);
+    }, [nodes, settings.spaces]);
 
     const hasVisibleNodes = useMemo(
         () => activeSpaceNodes.some((n) => n.status !== "minimized"),
@@ -161,17 +151,24 @@ export function useSynthesisNodesFromStore(settings: SynthesisSettings) {
                         );
                         if (validNodes.length > 0) setNodes(validNodes);
                     }
-                    if (
-                        typeof parsed.activeSpaceId === "string" &&
-                        ["work", "entertainment", "research"].includes(parsed.activeSpaceId)
-                    ) {
-                        setActiveSpaceId(parsed.activeSpaceId as SpaceId);
+                    setActiveSpaceId(parsed.activeSpaceId as SpaceId);
+                    if (parsed.spaceCache && typeof parsed.spaceCache === "object") {
+                        const cacheMap = new Map<string, { nodes: SynthesisNode[]; edges: SynthesisEdge[] }>();
+                        Object.entries(parsed.spaceCache).forEach(([sid, data]) => {
+                            cacheMap.set(sid, data as { nodes: SynthesisNode[]; edges: SynthesisEdge[] });
+                        });
+                        setSpaceCache(cacheMap);
                     }
                     if (parsed.conversationHistory && typeof parsed.conversationHistory === "object") {
-                        setConversationHistory((prev) => ({
-                            ...prev,
-                            ...(parsed.conversationHistory as Partial<typeof prev>),
-                        }));
+                        setConversationHistory((prev) => {
+                            const newHistory = { ...prev };
+                            Object.entries(parsed.conversationHistory as Record<string, unknown>).forEach(([key, val]) => {
+                                if (Array.isArray(val)) {
+                                    newHistory[key] = val as ConversationMessage[];
+                                }
+                            });
+                            return newHistory;
+                        });
                     }
                     if (Array.isArray(parsed.osConversationHistory)) {
                         setOsConversationHistory(parsed.osConversationHistory as ConversationMessage[]);
@@ -326,6 +323,7 @@ export function useSynthesisNodesFromStore(settings: SynthesisSettings) {
                 edges: state.edges,
                 conversationHistory: state.conversationHistory,
                 osConversationHistory: state.osConversationHistory,
+                spaceCache: Object.fromEntries(state.spaceCache.entries()),
             };
             const storageKey = getStorageKey(activeProfileId);
             if (settings.dataPersistence === "session") {

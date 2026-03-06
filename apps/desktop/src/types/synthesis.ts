@@ -10,7 +10,7 @@ export type NodeType =
 
 export type WidgetKind = "clock" | "calculator" | "notes" | "timer" | "weather";
 export type NodeStatus = "active" | "minimized" | "background" | "synthesizing";
-export type SpaceId = "work" | "entertainment" | "research";
+export type SpaceId = string;
 export type TextStyle = "sans" | "mono" | "serif";
 
 export interface Vec3 {
@@ -250,8 +250,6 @@ export interface EphemeralWidget {
 export interface SynthesisPersistedState {
     activeSpaceId: SpaceId;
     nodes: SynthesisNode[];
-    edges?: SynthesisEdge[];
-    conversationHistory?: SpaceConversationHistory;
-    osConversationHistory?: ConversationMessage[];
+    spaceCache?: Record<string, { nodes: SynthesisNode[]; edges: SynthesisEdge[] }>;
     // We intentionally don't persist ephemeral widgets for now, true to their name
 }
